@@ -1,6 +1,6 @@
 # PyTorch Sparse Linear Algebra Solvers
 
-A PyTorch implementation of sparse linear algebra solvers, mirroring JAX's scipy.sparse.linalg module with PyTorch-specific optimizations.
+A PyTorch implementation (JIT support) of sparse linear algebra solvers (CG, BiCGstab, GMRES), mirroring JAX's scipy.sparse.linalg module with PyTorch-specific optimizations.
 
 ## Overview
 
@@ -9,16 +9,8 @@ This library provides efficient implementations of iterative sparse linear syste
 - **BiCGStab (Bi-Conjugate Gradient Stabilized)** - for general non-symmetric matrices  
 - **GMRES (Generalized Minimal Residual)** - for general matrices with restart capability
 
-## Key Features
 
-- 🚀 **GPU Acceleration**: Full CUDA support with PyTorch's native GPU operations
-- ⚡ **JIT Compilation**: Optional PyTorch JIT optimization for maximum performance
-- 🔧 **Sparse Matrix Support**: Compatible with dense and sparse matrix formats
-- 📊 **JAX API Compatibility**: Mirrors JAX's scipy.sparse.linalg interface
-- 🎯 **High Precision**: Uses float64 by default for numerical stability
-- 🌳 **Tree Utilities**: Includes PyTorch adaptation of JAX's tree manipulation utilities
-
-## Attribution and License
+## Attribution
 
 This implementation is **algorithmically derived** from Google JAX's scipy.sparse.linalg module:
 
@@ -28,34 +20,20 @@ This implementation is **algorithmically derived** from Google JAX's scipy.spars
 - License: Apache-2.0
 - Copyright: Google LLC
 
-**Key Differences from JAX:**
-1. **Framework**: Ported from JAX/NumPy to PyTorch tensors
-2. **Complex Numbers**: Removed complex number support (real numbers only)
-3. **JIT Compilation**: Uses PyTorch's JIT instead of JAX's
-4. **GPU Optimization**: Leverages PyTorch's CUDA operations
-5. **Tree Utilities**: Adapted JAX's tree manipulation for PyTorch
 
-**Legal Status:**
-- ✅ **Algorithm Implementation**: Mathematical algorithms are not copyrightable
-- ✅ **Independent Implementation**: Rewritten in PyTorch, not copied code
-- ✅ **Proper Attribution**: Original JAX implementation credited
-- ✅ **License Compatibility**: Our Apache-2.0 license is compatible with JAX's Apache-2.0
+## Enviroment
 
-## Installation
+Cuda-12
 
-```bash
-# Ensure PyTorch is installed with CUDA support (if desired)
-conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia
+Pytorch-2.7 (**Note torch.sparse.spsolve require CuDSS support, public release torch are not compiled with CuDSS=1, Maybe you need to recompile locally**)
 
-# For sparse matrix support (optional but recommended)
-pip install torch-sparse torch-geometric
-```
+JAX-Cuda12
 
 ## Quick Start
 
 ```python
 import torch
-from torch_sparse_linalg import cg, bicgstab, gmres
+from src.torch_sparse_linalg import cg, bicgstab, gmres
 
 # Create a test system Ax = b
 n = 1000
@@ -64,16 +42,52 @@ A = A + A.T + torch.eye(n, dtype=torch.float64, device='cuda') * 2  # Make SPD
 b = torch.rand(n, dtype=torch.float64, device='cuda')
 
 # Solve using Conjugate Gradient
-x_cg, info = cg(A, b, tol=1e-8, maxiter=1000)
+x_cg, info = cg(A, b, tol=1e-5, maxiter=1000)
 print(f"CG converged: {info == 0}")
 
 # Solve using BiCGStab  
-x_bicg, info = bicgstab(A, b, tol=1e-8, maxiter=1000)
+x_bicg, info = bicgstab(A, b, tol=1e-5, maxiter=1000)
 print(f"BiCGStab converged: {info == 0}")
 
 # Solve using GMRES with restart
-x_gmres, info = gmres(A, b, tol=1e-8, restart=30, maxiter=1000)
+x_gmres, info = gmres(A, b, tol=1e-5, restart=20, maxiter=1000)
 print(f"GMRES converged: {info == 0}")
+```
+
+### Using Function-Based Linear Operators
+
+The solvers also accept functions that compute matrix-vector products:
+
+```python
+import torch
+from src.torch_sparse_linalg import cg, bicgstab, gmres
+
+# Define a function that computes Ax for a tridiagonal matrix
+def tridiagonal_matvec(x):
+    """Compute tridiagonal matrix-vector product without storing the matrix"""
+    n = x.shape[0]
+    y = torch.zeros_like(x)
+    
+    # Apply tridiagonal pattern: [-1, 2, -1]
+    y[0] = 2*x[0] - x[1] if n > 1 else 2*x[0]
+    for i in range(1, n-1):
+        y[i] = -x[i-1] + 2*x[i] - x[i+1]
+    if n > 1:
+        y[n-1] = -x[n-2] + 2*x[n-1]
+    
+    return y
+
+# Create right-hand side vector
+n = 1000
+b = torch.ones(n, dtype=torch.float64, device='cuda')
+
+# Solve using function-based operator
+x_cg, info = cg(tridiagonal_matvec, b, tol=1e-5, maxiter=1000)
+print(f"Function-based CG converged: {info == 0}")
+
+# Works with all solvers
+x_bicg, info = bicgstab(tridiagonal_matvec, b, tol=1e-5, maxiter=1000)
+x_gmres, info = gmres(tridiagonal_matvec, b, tol=1e-5, restart=20, maxiter=1000)
 ```
 
 ## API Reference
@@ -83,32 +97,122 @@ print(f"GMRES converged: {info == 0}")
 All solvers follow the same interface pattern:
 
 ```python
-x, info = solver(A, b, tol=1e-6, maxiter=None, **kwargs)
+x, info = solver(A, b, x0=None, *, tol=1e-5, atol=0.0, maxiter=None, M=None, **kwargs)
 ```
 
 **Parameters:**
-- `A`: PyTorch tensor, shape (n, n) - coefficient matrix
-- `b`: PyTorch tensor, shape (n,) - right-hand side vector  
-- `tol`: float - convergence tolerance (default: 1e-6)
-- `maxiter`: int - maximum iterations (default: min(n, 1000))
+- `A`: PyTorch tensor or callable - coefficient matrix or matrix-vector function
+- `b`: PyTorch tensor - right-hand side vector  
+- `x0`: PyTorch tensor, optional - initial guess (default: zero vector)
+- `tol`: float - relative convergence tolerance (default: 1e-5)
+- `atol`: float - absolute convergence tolerance (default: 0.0)
+- `maxiter`: int, optional - maximum iterations (default: min(n, 1000) for CG/BiCGStab, 10*n for GMRES)
+- `M`: callable, optional - preconditioner function
 
 **Returns:**
 - `x`: PyTorch tensor - solution vector
 - `info`: int - convergence status (0=success, >0=iterations, <0=error)
 
-### Solver-Specific Parameters
+### Detailed Function Signatures
 
-**GMRES Additional Parameters:**
-- `restart`: int - restart parameter (default: min(20, n))
+#### Conjugate Gradient (CG)
+
+```python
+x, info = cg(A, b, x0=None, *, tol=1e-5, atol=0.0, maxiter=None, M=None)
+```
+
+**Requirements:**
+- `A` must be symmetric positive definite
+- Best for symmetric positive definite systems
+
+#### BiCGStab
+
+```python
+x, info = bicgstab(A, b, x0=None, *, tol=1e-5, atol=0.0, maxiter=None, M=None)
+```
+
+**Requirements:**
+- `A` can be any general (nonsymmetric) linear operator
+- Good for general nonsymmetric systems
+
+#### GMRES
+
+```python
+x, info = gmres(A, b, x0=None, *, tol=1e-5, atol=0.0, restart=20, 
+                maxiter=None, M=None, solve_method='incremental')
+```
+
+**Additional Parameters:**
+- `restart`: int - Krylov subspace size before restart (default: 20)
 - `solve_method`: str - 'incremental' or 'batched' (default: 'incremental')
+
+**Requirements:**
+- `A` can be any general linear operator
+- Memory usage scales with restart parameter
+
+### Input Types
+
+**Matrix A:**
+- **PyTorch Tensor**: Dense matrix of shape (n, n)
+- **Callable Function**: `A(x) -> y` where `y = A @ x`
+
+**Example Function-Based Operator:**
+```python
+def matrix_vector_product(x):
+    # Your custom matrix-vector multiplication
+    return result  # same shape and structure as x
+```
+
+### Convergence Criteria
+
+All solvers use the convergence criterion:
+```
+norm(residual) <= max(tol * norm(b), atol)
+```
+
+Where:
+- `tol`: Relative tolerance (default: 1e-5)
+- `atol`: Absolute tolerance (default: 0.0)
+- `norm(b)`: Norm of the right-hand side vector
+
+### Best Practices
+
+**Data Types:**
+- Use `torch.float64` for best numerical precision
+- Complex numbers are supported via `torch.complex128`
+
+**Device Placement:**
+- Place all tensors on the same device (CPU or GPU)
+- GPU acceleration provides significant speedup for large systems
+
+**Tolerance Settings:**
+- Start with default `tol=1e-5` 
+- For high precision: use `tol=1e-8` or lower
+- Set `atol` for absolute error control when `norm(b)` is very small
+
+**Matrix Conditions:**
+- **CG**: Requires symmetric positive definite matrices
+- **BiCGStab**: Works with general nonsymmetric matrices  
+- **GMRES**: Most robust for ill-conditioned systems
+
+**Memory Considerations:**
+- Function-based operators save memory for large sparse systems
+- GMRES memory usage scales with `restart` parameter
+- Use smaller `restart` values for memory-constrained environments
 
 ### Convergence Status Codes
 
-- `0`: Successful convergence
-- `> 0`: Number of iterations when stopped (may not have converged)
-- `-1`: Maximum iterations reached without convergence
-- `-2`: Numerical error or breakdown
-- `-3`: Invalid parameters
+The `info` return value indicates convergence status:
+
+- `0`: Successful convergence within tolerance
+- `> 0`: Maximum iterations reached (may not have converged to tolerance)
+- `-1`: Failed to converge or numerical breakdown
+
+**Notes:**
+- For `cg`: `info > 0` indicates the number of iterations when max iterations reached
+- For `bicgstab`: `info = 0` for success, `info != 0` for failure  
+- For `gmres`: `info = 0` for success, `info = -1` for failure
+- Always check convergence: `converged = (info == 0)`
 
 ## Performance Comparison
 
@@ -133,12 +237,13 @@ python test_sparse_gpu.py
 ## File Structure
 
 ```
-torch_sparse_linalg/
+Pytorch_sparse_linalg/
 ├── README.md                    # This file
-├── torch_sparse_linalg.py      # Main solver implementations  
-├── torch_tree_util.py          # PyTorch tree utilities (from JAX)
+├── src/
+│   ├── torch_sparse_linalg.py  # Main solver implementations  
+│   └── torch_tree_util.py      # PyTorch tree utilities (from JAX)
 ├── test_sparse_gpu.py          # Comprehensive benchmarking script
-└── sparse_solver_benchmark_results.md  # Example benchmark report
+└── test_results.md             # Example benchmark report
 ```
 
 ## Implementation Details
@@ -229,8 +334,6 @@ This implementation focuses on mirroring JAX's proven algorithms in PyTorch. Con
 
 ## License
 
-Apache License 2.0 - see LICENSE file for details.
-
-**Author**: Litianyu141
+Apache License 2.0 
 
 **Note**: This code is licensed under Apache-2.0, the same license as the original JAX implementation from which algorithmic concepts were derived. This ensures full license compatibility and proper attribution.
