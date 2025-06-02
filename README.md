@@ -23,11 +23,11 @@ This implementation is **algorithmically derived** from Google JAX's scipy.spars
 
 ## Enviroment
 
-Cuda-12
+- Cuda-12
 
-Pytorch-2.7 (**Note torch.sparse.spsolve require CuDSS support, public release torch are not compiled with CuDSS=1, Maybe you need to recompile locally**)
+- Pytorch-2.7 (**Note torch.sparse.spsolve require CuDSS support, public-released-wheel pytorch are not compiled with CuDSS=1, Build from source may be necessary**)
 
-JAX-Cuda12
+- JAX-Cuda12
 
 ## Quick Start
 
@@ -113,7 +113,6 @@ x, info = solver(A, b, x0=None, *, tol=1e-5, atol=0.0, maxiter=None, M=None, **k
 - `x`: PyTorch tensor - solution vector
 - `info`: int - convergence status (0=success, >0=iterations, <0=error)
 
-### Detailed Function Signatures
 
 #### Conjugate Gradient (CG)
 
@@ -163,57 +162,6 @@ def matrix_vector_product(x):
     return result  # same shape and structure as x
 ```
 
-### Convergence Criteria
-
-All solvers use the convergence criterion:
-```
-norm(residual) <= max(tol * norm(b), atol)
-```
-
-Where:
-- `tol`: Relative tolerance (default: 1e-5)
-- `atol`: Absolute tolerance (default: 0.0)
-- `norm(b)`: Norm of the right-hand side vector
-
-### Best Practices
-
-**Data Types:**
-- Use `torch.float64` for best numerical precision
-- Complex numbers are supported via `torch.complex128`
-
-**Device Placement:**
-- Place all tensors on the same device (CPU or GPU)
-- GPU acceleration provides significant speedup for large systems
-
-**Tolerance Settings:**
-- Start with default `tol=1e-5` 
-- For high precision: use `tol=1e-8` or lower
-- Set `atol` for absolute error control when `norm(b)` is very small
-
-**Matrix Conditions:**
-- **CG**: Requires symmetric positive definite matrices
-- **BiCGStab**: Works with general nonsymmetric matrices  
-- **GMRES**: Most robust for ill-conditioned systems
-
-**Memory Considerations:**
-- Function-based operators save memory for large sparse systems
-- GMRES memory usage scales with `restart` parameter
-- Use smaller `restart` values for memory-constrained environments
-
-### Convergence Status Codes
-
-The `info` return value indicates convergence status:
-
-- `0`: Successful convergence within tolerance
-- `> 0`: Maximum iterations reached (may not have converged to tolerance)
-- `-1`: Failed to converge or numerical breakdown
-
-**Notes:**
-- For `cg`: `info > 0` indicates the number of iterations when max iterations reached
-- For `bicgstab`: `info = 0` for success, `info != 0` for failure  
-- For `gmres`: `info = 0` for success, `info = -1` for failure
-- Always check convergence: `converged = (info == 0)`
-
 ## Performance Comparison
 
 The `test_sparse_gpu.py` script provides comprehensive benchmarking against JAX:
@@ -221,84 +169,6 @@ The `test_sparse_gpu.py` script provides comprehensive benchmarking against JAX:
 ```bash
 python test_sparse_gpu.py
 ```
-
-**Test Matrices:**
-- Tridiagonal matrices (200×200, 500×500)
-- 2D Poisson operators (5-point stencil)
-- Random sparse diagonally dominant matrices
-- Ultra-large matrices (10,000×10,000+)
-
-**Benchmark Results Summary:**
-- PyTorch implementations achieve comparable accuracy to JAX
-- GPU acceleration provides significant speedup for large matrices
-- Direct solvers (`torch.linalg.solve`) offer highest accuracy for small-medium matrices
-- Iterative solvers excel for large sparse systems
-
-## File Structure
-
-```
-Pytorch_sparse_linalg/
-├── README.md                    # This file
-├── src/
-│   ├── torch_sparse_linalg.py  # Main solver implementations  
-│   └── torch_tree_util.py      # PyTorch tree utilities (from JAX)
-├── test_sparse_gpu.py          # Comprehensive benchmarking script
-└── test_results.md             # Example benchmark report
-```
-
-## Implementation Details
-
-### Algorithmic Fidelity
-
-Our implementations follow JAX's algorithms exactly:
-
-1. **CG Algorithm**: Implements the same preconditioned conjugate gradient as JAX
-2. **BiCGStab**: Matches JAX's bi-conjugate gradient stabilized method
-3. **GMRES**: Includes both incremental and batched variants with identical restart logic
-
-### Numerical Precision
-
-- **Default dtype**: `torch.float64` for maximum precision
-- **Convergence criteria**: Identical tolerance checking as JAX
-- **Stability**: Includes JAX's numerical stability improvements
-
-### Tree Utilities
-
-The `torch_tree_util.py` module provides PyTorch equivalents of JAX's tree manipulation:
-- `tree_map`: Apply functions to nested structures
-- `tree_reduce`: Reduce operations over tree structures  
-- `tree_flatten/unflatten`: Convert between nested and flat representations
-
-These utilities enable the same functional programming patterns as JAX.
-
-## Testing and Validation
-
-### Test Coverage
-
-The test suite (`test_sparse_gpu.py`) validates:
-- ✅ **Numerical accuracy** vs JAX reference implementations
-- ✅ **Convergence behavior** across different matrix types
-- ✅ **Performance characteristics** on GPU vs CPU
-- ✅ **Memory usage** and scalability
-- ✅ **Error handling** and edge cases
-
-### Matrix Types Tested
-
-1. **Tridiagonal matrices**: Classic test case for iterative methods
-2. **2D Poisson operators**: Realistic PDE discretization  
-3. **Random sparse diagonally dominant**: General sparse systems
-4. **Ultra-large matrices**: Scalability testing (10K+ dimensions)
-
-### Fairness of Comparison
-
-The benchmark ensures fair JAX vs PyTorch comparison:
-- ✅ Identical solver parameters (tolerance, max iterations, restart)
-- ✅ Same matrix conditioning and right-hand sides
-- ✅ Comparable precision (float64)
-- ✅ Proper GPU synchronization timing
-- ✅ Statistical analysis over multiple test cases
-
-## Usage Recommendations
 
 ### Solver Selection Guide
 
@@ -320,17 +190,6 @@ The benchmark ensures fair JAX vs PyTorch comparison:
 2. **Data Types**: Use `torch.float64` for best numerical stability
 3. **Memory**: For very large systems, consider block methods
 4. **JIT Compilation**: Enable for repeated solves of similar systems
-
-## Contributing
-
-This implementation focuses on mirroring JAX's proven algorithms in PyTorch. Contributions welcome for:
-
-- Preconditioning strategies
-- Additional iterative methods (MINRES, LSQR, etc.)
-- Complex number support
-- Sparse matrix format optimizations
-- Performance improvements
-
 
 ## License
 
