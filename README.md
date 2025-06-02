@@ -187,9 +187,7 @@ python test_sparse_gpu.py
 ### Performance Tips
 
 1. **GPU Usage**: Ensure tensors are on GPU for large matrices
-2. **Data Types**: Use `torch.float64` for best numerical stability
-3. **Memory**: For very large systems, consider block methods
-4. **JIT Compilation**: Enable for repeated solves of similar systems
+2. **JIT Compilation**: Enable for repeated solves of similar systems
 
 ## License
 
