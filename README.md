@@ -2,6 +2,9 @@
 
 A PyTorch implementation (JIT support) of sparse linear algebra solvers (CG, BiCGstab, GMRES), mirroring JAX's scipy.sparse.linalg module with PyTorch-specific optimizations.
 
+## TODO List
+- [] Incorporte AMGX (Solve/Pre-condition) and implement backward
+
 ## Overview
 
 This library provides efficient implementations of iterative sparse linear system solvers for PyTorch tensors:
