@@ -631,35 +631,36 @@ def benchmark_solvers(nx: int = 100, nsteps: int = 50):
             print(f"{solver_name:15s}: Failed ❌ ({result['error'][:50]}...)")
 
 
-if __name__ == "__main__":
-    # Example usage
-    import argparse
+''' Please refer to cavity_flow.py for the main function '''
+# if __name__ == "__main__":
+#     # Example usage
+#     import argparse
     
-    parser = argparse.ArgumentParser(description='Optimized FVM Lid-Driven Cavity Solver')
-    parser.add_argument('--nx', type=int, default=100, help='Grid resolution')
-    parser.add_argument('--steps', type=int, default=10, help='Number of time steps')
-    parser.add_argument('--solver', type=str, default='gmres', 
-                       choices=['direct', 'bicgstab', 'gmres', 'gmres_batched'],
-                       help='Pressure solver type')
-    parser.add_argument('--benchmark', action='store_true', help='Run solver benchmark')
-    parser.add_argument('--plot', type=int, default=10, help='Plot interval (0 to disable)')
+#     parser = argparse.ArgumentParser(description='Optimized FVM Lid-Driven Cavity Solver')
+#     parser.add_argument('--nx', type=int, default=100, help='Grid resolution')
+#     parser.add_argument('--steps', type=int, default=10, help='Number of time steps')
+#     parser.add_argument('--solver', type=str, default='gmres', 
+#                        choices=['direct', 'bicgstab', 'gmres', 'gmres_batched'],
+#                        help='Pressure solver type')
+#     parser.add_argument('--benchmark', action='store_true', help='Run solver benchmark')
+#     parser.add_argument('--plot', type=int, default=10, help='Plot interval (0 to disable)')
     
-    args = parser.parse_args()
+#     args = parser.parse_args()
     
-    # Map string to enum
-    solver_map = {
-        'direct': SolverType.DIRECT,
-        'bicgstab': SolverType.BICGSTAB,
-        'gmres': SolverType.GMRES,
-        'gmres_batched': SolverType.GMRES_BATCHED
-    }
+#     # Map string to enum
+#     solver_map = {
+#         'direct': SolverType.DIRECT,
+#         'bicgstab': SolverType.BICGSTAB,
+#         'gmres': SolverType.GMRES,
+#         'gmres_batched': SolverType.GMRES_BATCHED
+#     }
     
-    if args.benchmark:
-        benchmark_solvers(nx=args.nx, nsteps=args.steps)
-    else:
-        solver = run_simulation(
-            nx=args.nx,
-            nsteps=args.steps,
-            solver_type=solver_map[args.solver],
-            plot_interval=args.plot
-        )
+#     if args.benchmark:
+#         benchmark_solvers(nx=args.nx, nsteps=args.steps)
+#     else:
+#         solver = run_simulation(
+#             nx=args.nx,
+#             nsteps=args.steps,
+#             solver_type=solver_map[args.solver],
+#             plot_interval=args.plot
+#         )
