@@ -2,8 +2,10 @@
 
 A PyTorch implementation (JIT support) of sparse linear algebra solvers (CG, BiCGstab, GMRES), mirroring JAX's scipy.sparse.linalg module with PyTorch-specific optimizations.
 
+> Update (06.03.2025): Update Lid-Driven Cavity solving case with FVM on Staggered grid (Derived from Prof.Tony Saad`s repo [html](http://www.tonysaad.net/category/code/))
+
 ## TODO List
-- [] Incorporte AMGX (Solve/Pre-condition) and implement backward
+- [ ] Incorporte AMGX (Solve/Pre-condition) and implement backward
 
 ## Overview
 
@@ -11,7 +13,7 @@ This library provides efficient implementations of iterative sparse linear syste
 - **Conjugate Gradient (CG)** - for symmetric positive definite matrices
 - **BiCGStab (Bi-Conjugate Gradient Stabilized)** - for general non-symmetric matrices  
 - **GMRES (Generalized Minimal Residual)** - for general matrices with restart capability
-
+- **Direct** - torch.sparse.spsolve [CuDSS](https://sparsedays.cerfacs.fr/wp-content/uploads/sites/72/2024/07/sd2024-session1-Rodriguez.pdf?utm_source=chatgpt.com) required
 
 ## Attribution
 

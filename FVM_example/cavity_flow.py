@@ -211,7 +211,7 @@ def main():
     
     # Solver selection - Choose from:
     # SolverType.BICGSTAB, SolverType.GMRES, SolverType.GMRES_BATCHED, SolverType.DIRECT
-    solver_type = SolverType.DIRECT  # Default: BiCGStab (best balance of speed and stability)
+    solver_type = SolverType.BiCGStab  # Default: BiCGStab (best balance of speed and stability)
     
     # Solver tolerances (for iterative solvers only)
     solver_tolerance = 1e-12    # Residual tolerance
