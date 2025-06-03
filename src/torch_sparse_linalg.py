@@ -539,7 +539,7 @@ def _gmres_incremental(A: Callable, b: Any, x0: Any, unit_residual: Any,
 def gmres(A: Union[torch.Tensor, Callable[[Any], Any]], b: Any, x0: Optional[Any] = None, 
           *, tol: float = 1e-5, atol: float = 0.0, restart: int = 20, 
           maxiter: Optional[int] = None, M: Optional[Callable[[Any], Any]] = None,
-          solve_method: str = 'incremental') -> Tuple[Any, Optional[int]]:
+          solve_method: str = 'batched') -> Tuple[Any, Optional[int]]:
     """
     GMRES solves the linear system A x = b for x, given A and b.
 

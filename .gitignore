@@ -1,2 +1,5 @@
 src/__pycache__/torch_sparse_linalg.cpython-311.pyc
 src/__pycache__/torch_tree_util.cpython-311.pyc
+__pycache__
+FVM_example/torch_results
+FVM_example/scipy_results
