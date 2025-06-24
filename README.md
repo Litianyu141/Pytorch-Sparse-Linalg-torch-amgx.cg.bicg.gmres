@@ -134,68 +134,6 @@ pip install .
 python -c "import pyamgx; print('AMGX successfully installed!')"
 ```
 
-#### Troubleshooting
-
-**Common Issues:**
-
-1. **CUDA Architecture Mismatch**: Adjust `-DCUDA_ARCH` based on your GPU:
-   - RTX 4090/4080: `89`
-   - RTX 3090/3080: `86`
-   - RTX 2080 Ti: `75`
-   - Check your GPU's compute capability at: https://developer.nvidia.com/cuda-gpus
-
-2. **CMake Version**: Ensure CMake 3.18+ is installed:
-   ```bash
-   cmake --version
-   ```
-
-3. **GCC Compatibility**: CUDA 12.x requires GCC 9.0-12.x:
-   ```bash
-   gcc --version
-   ```
-
-4. **Memory Issues**: If compilation fails due to memory, reduce parallel jobs:
-   ```bash
-   make -j4  # Instead of -j$(nproc)
-   ```
-
-#### Alternative: Docker Installation
-
-For easier setup, consider using NVIDIA's CUDA Docker containers:
-
-```bash
-# Pull NVIDIA CUDA development image
-docker pull nvidia/cuda:12.8-devel-ubuntu22.04
-
-# Run container with GPU support
-docker run --gpus all -it nvidia/cuda:12.8-devel-ubuntu22.04
-```
-
-### Environment Setup Notes
-
-**Important Considerations:**
-
-1. **CUDA Version Compatibility**: Ensure your PyTorch CUDA version matches your system CUDA:
-   ```bash
-   # Check system CUDA
-   nvcc --version
-
-   # Check PyTorch CUDA
-   python -c "import torch; print(torch.version.cuda)"
-   ```
-
-2. **Multiple GPU Support**: This library automatically detects and uses available GPUs. For multi-GPU systems like the tested 6x RTX 4090 setup, AMGX will utilize the first available GPU by default.
-
-3. **Memory Requirements**:
-   - AMGX compilation requires ~4GB RAM
-   - Runtime memory depends on matrix size
-   - RTX 4090 with 24GB VRAM can handle very large sparse systems
-
-4. **Performance Optimization**:
-   - Use `torch.cuda.empty_cache()` between large solves
-   - Consider mixed precision for memory-intensive problems
-   - AMGX shows significant speedup (3-5x) for matrices > 10K×10K
-
 **Tested Configuration Summary:**
 ```
 Hardware: 6x NVIDIA RTX 4090 (24GB each)
@@ -225,8 +163,6 @@ This script will check:
 - ✅ Automatic differentiation support
 
 If all checks pass, you're ready to use the library!
-
-
 
 ## Quick Start
 
@@ -464,32 +400,6 @@ This will test:
 - **Matrix Types**: Diagonally dominant, non-diagonally dominant, and banded matrices
 
 The test generates an HTML report with detailed results and recommendations.
-
-## Solver Selection Guide
-
-### For Symmetric Positive Definite Matrices
-
-- **Small (< 1K)**: `torch.linalg.solve` (direct)
-- **Medium (1K-10K)**: `cg` or `amgx_cg`
-- **Large (> 10K)**: `amgx_cg` (GPU acceleration)
-
-### For General Non-Symmetric Matrices
-
-- **Small (< 1K)**: `torch.linalg.solve` (direct)
-- **Medium (1K-10K)**: `bicgstab` or `amgx_bicgstab`
-- **Large (> 10K)**: `amgx_bicgstab` (GPU acceleration)
-
-### For Ill-Conditioned Systems
-
-- **PyTorch**: `gmres` with smaller restart parameter
-- **AMGX**: `amgx_gmres` with GPU acceleration
-
-### Performance Tips
-
-1. **GPU Usage**: Use AMGX solvers for large matrices on GPU
-2. **Matrix Type**: Choose solver based on matrix properties
-3. **Tolerance**: Adjust tolerance based on required accuracy
-4. **Automatic Differentiation**: All solvers support PyTorch autograd
 
 ## Examples
 
