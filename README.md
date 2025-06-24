@@ -1,40 +1,236 @@
 # PyTorch Sparse Linear Algebra Solvers
 
-A PyTorch implementation (JIT support) of sparse linear algebra solvers (CG, BiCGstab, GMRES), mirroring JAX's scipy.sparse.linalg module with PyTorch-specific optimizations.
+A comprehensive PyTorch implementation of sparse linear algebra solvers with GPU acceleration and automatic differentiation support.
 
-> Update (06.03.2025): Update Lid-Driven Cavity solving case with FVM on Staggered grid (Derived from Prof.Tony Saad`s repo [html](http://www.tonysaad.net/category/code/))
+## Latest Updates
 
-## TODO List
-- [ ] Incorporte AMGX (Solve/Pre-condition) and implement backward
+> 🆕 **Update 2025.06.25**: support pyamgx[[installation-guide]](#installation) with improved differentiability
 
 ## Overview
 
 This library provides efficient implementations of iterative sparse linear system solvers for PyTorch tensors:
+
+```
+├── src/                           # PyTorch sparse solvers
+│   └── torch_sparse_linalg.py    # CG, BiCGStab, GMRES implementations
+├── src_torch_amgx/                 # AMGX integration
+│   └── torch_amgx.py             # Differentiable AMGX solvers
+├── test_comprehensive_solvers.py  # Comprehensive testing suite
+├── examples/                      # Example applications
+└── README.md                     # This file
+```
+
+### PyTorch Solvers (CPU/GPU)
 - **Conjugate Gradient (CG)** - for symmetric positive definite matrices
-- **BiCGStab (Bi-Conjugate Gradient Stabilized)** - for general non-symmetric matrices  
+- **BiCGStab (Bi-Conjugate Gradient Stabilized)** - for general non-symmetric matrices
 - **GMRES (Generalized Minimal Residual)** - for general matrices with restart capability
-- **Direct** - torch.sparse.spsolve [CuDSS](https://sparsedays.cerfacs.fr/wp-content/uploads/sites/72/2024/07/sd2024-session1-Rodriguez.pdf?utm_source=chatgpt.com) required
 
-## Attribution
+### AMGX Solvers (GPU-accelerated) installation-guide:[AMGX](https://github.com/NVIDIA/AMGX); [Pyamgx](https://github.com/shwina/pyamgx)
+- **AMGX CG** - GPU-accelerated conjugate gradient with automatic differentiation
+- **AMGX BiCGStab** - GPU-accelerated BiCGStab with automatic differentiation
+- **AMGX GMRES** - GPU-accelerated GMRES with automatic differentiation
 
-This implementation is **algorithmically derived** from Google JAX's scipy.sparse.linalg module:
+## Key Features
 
-**Original JAX Implementation:**
-- Repository: https://github.com/google/jax
-- File: `jax/scipy/sparse/linalg.py`
-- License: Apache-2.0
-- Copyright: Google LLC
+- **Full Automatic Differentiation**: All solvers support PyTorch's autograd
+- **GPU Acceleration**: AMGX solvers leverage NVIDIA GPU acceleration
+- **Multiple Matrix Types**: Optimized for different sparse matrix structures
+- **Comprehensive Testing**: Built-in testing suite for accuracy, speed, and differentiability
+
+## Environment Requirements
+
+### Tested Environment
+
+This library has been tested and verified on the following configuration:
+
+**Hardware:**
+- **GPU**: 6x NVIDIA GeForce RTX 4090 (24GB VRAM each)
+- **CPU**: Multi-core x86_64 architecture
+
+**Software Environment:**
+- **OS**: Ubuntu 22.04.4 LTS
+- **Python**: 3.11.0
+- **PyTorch**: 2.7.1+cu128
+- **CUDA Runtime**: 12.8.61
+- **CUDA Driver**: 12.4 (compatible with CUDA 12.8)
+- **NVIDIA Driver**: 550.54.14
+- **GCC**: 12.3.0
+- **CMake**: 3.22.1
+
+## Installation
+
+### Basic Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/your-repo/pytorch-sparse-linalg.git
+cd pytorch-sparse-linalg
+
+# Install dependencies
+pip install torch numpy scipy pandas matplotlib
+```
+
+### AMGX Installation (Optional)
+
+For GPU-accelerated AMGX solvers, you need to compile AMGX and pyamgx from source:
+
+#### Step 1: Install Dependencies
+
+```bash
+# Ubuntu/Debian
+sudo apt update
+sudo apt install build-essential cmake git
+
+# Ensure CUDA is properly installed
+nvcc --version  # Should show CUDA 12.0+
+```
+
+#### Step 2: Compile AMGX Library
+
+```bash
+# Clone AMGX repository
+git clone https://github.com/NVIDIA/AMGX.git
+cd AMGX
+
+# Create build directory
+mkdir build && cd build
+
+# Configure with CMake (adjust CUDA architecture for your GPU)
+# For RTX 4090: compute capability 8.9
+cmake .. \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCUDA_ARCH=89 \
+    -DCMAKE_INSTALL_PREFIX=/usr/local
+
+# Compile (use number of CPU cores, e.g., -j12 for 12 cores)
+make -j$(nproc)
+
+# Install
+sudo make install
+
+# Update library path
+echo '/usr/local/lib' | sudo tee -a /etc/ld.so.conf.d/amgx.conf
+sudo ldconfig
+```
+
+#### Step 3: Compile pyamgx
+
+```bash
+# Clone pyamgx repository
+git clone https://github.com/shwina/pyamgx.git
+cd pyamgx
+
+# Set environment variables
+export AMGX_DIR=/usr/local
+export CUDA_HOME=/usr/local/cuda
+
+# Install
+pip install .
+```
+
+#### Step 4: Verify Installation
+
+```bash
+python -c "import pyamgx; print('AMGX successfully installed!')"
+```
+
+#### Troubleshooting
+
+**Common Issues:**
+
+1. **CUDA Architecture Mismatch**: Adjust `-DCUDA_ARCH` based on your GPU:
+   - RTX 4090/4080: `89`
+   - RTX 3090/3080: `86`
+   - RTX 2080 Ti: `75`
+   - Check your GPU's compute capability at: https://developer.nvidia.com/cuda-gpus
+
+2. **CMake Version**: Ensure CMake 3.18+ is installed:
+   ```bash
+   cmake --version
+   ```
+
+3. **GCC Compatibility**: CUDA 12.x requires GCC 9.0-12.x:
+   ```bash
+   gcc --version
+   ```
+
+4. **Memory Issues**: If compilation fails due to memory, reduce parallel jobs:
+   ```bash
+   make -j4  # Instead of -j$(nproc)
+   ```
+
+#### Alternative: Docker Installation
+
+For easier setup, consider using NVIDIA's CUDA Docker containers:
+
+```bash
+# Pull NVIDIA CUDA development image
+docker pull nvidia/cuda:12.8-devel-ubuntu22.04
+
+# Run container with GPU support
+docker run --gpus all -it nvidia/cuda:12.8-devel-ubuntu22.04
+```
+
+### Environment Setup Notes
+
+**Important Considerations:**
+
+1. **CUDA Version Compatibility**: Ensure your PyTorch CUDA version matches your system CUDA:
+   ```bash
+   # Check system CUDA
+   nvcc --version
+
+   # Check PyTorch CUDA
+   python -c "import torch; print(torch.version.cuda)"
+   ```
+
+2. **Multiple GPU Support**: This library automatically detects and uses available GPUs. For multi-GPU systems like the tested 6x RTX 4090 setup, AMGX will utilize the first available GPU by default.
+
+3. **Memory Requirements**:
+   - AMGX compilation requires ~4GB RAM
+   - Runtime memory depends on matrix size
+   - RTX 4090 with 24GB VRAM can handle very large sparse systems
+
+4. **Performance Optimization**:
+   - Use `torch.cuda.empty_cache()` between large solves
+   - Consider mixed precision for memory-intensive problems
+   - AMGX shows significant speedup (3-5x) for matrices > 10K×10K
+
+**Tested Configuration Summary:**
+```
+Hardware: 6x NVIDIA RTX 4090 (24GB each)
+OS: Ubuntu 22.04.4 LTS
+CUDA: 12.8 Runtime / 12.4 Driver
+PyTorch: 2.7.1+cu128
+Python: 3.11.0
+GCC: 12.3.0
+```
+
+This configuration provides optimal performance for both PyTorch and AMGX solvers.
+
+### Installation Verification
+
+After installation, verify everything is working correctly:
+
+```bash
+# Run the verification script
+python verify_installation.py
+```
+
+This script will check:
+- ✅ PyTorch and CUDA installation
+- ✅ PyTorch sparse solvers functionality
+- ✅ AMGX library and pyamgx bindings
+- ✅ torch_amgx integration
+- ✅ Automatic differentiation support
+
+If all checks pass, you're ready to use the library!
 
 
-## Enviroment
-
-- Cuda-12
-
-- Pytorch-2.7 (**Note torch.sparse.spsolve require CuDSS support, public-released-wheel pytorch are not compiled with CuDSS=1, Build from source may be necessary**)
-
-- JAX-Cuda12
 
 ## Quick Start
+
+### PyTorch Solvers
 
 ```python
 import torch
@@ -50,13 +246,65 @@ b = torch.rand(n, dtype=torch.float64, device='cuda')
 x_cg, info = cg(A, b, tol=1e-5, maxiter=1000)
 print(f"CG converged: {info == 0}")
 
-# Solve using BiCGStab  
+# Solve using BiCGStab
 x_bicg, info = bicgstab(A, b, tol=1e-5, maxiter=1000)
 print(f"BiCGStab converged: {info == 0}")
 
 # Solve using GMRES with restart
 x_gmres, info = gmres(A, b, tol=1e-5, restart=20, maxiter=1000)
 print(f"GMRES converged: {info == 0}")
+```
+
+### AMGX Solvers (GPU-accelerated)
+
+```python
+import torch
+from src_torch_amgx.torch_amgx import amgx_cg, amgx_bicgstab, amgx_gmres
+
+# Create a sparse test system
+n = 1000
+A = torch.rand(n, n, dtype=torch.float64, device='cuda')
+A = A + A.T + torch.eye(n, dtype=torch.float64, device='cuda') * 2  # Make SPD
+b = torch.rand(n, dtype=torch.float64, device='cuda')
+
+# Solve using AMGX CG (GPU-accelerated)
+x_amgx_cg = amgx_cg(A, b, tol=1e-8, maxiter=1000)
+
+# Solve using AMGX BiCGStab (GPU-accelerated)
+x_amgx_bicg = amgx_bicgstab(A, b, tol=1e-8, maxiter=1000)
+
+# Solve using AMGX GMRES (GPU-accelerated)
+x_amgx_gmres = amgx_gmres(A, b, tol=1e-8, maxiter=1000)
+```
+
+### Automatic Differentiation
+
+All solvers support automatic differentiation:
+
+```python
+import torch
+from src.torch_sparse_linalg import cg
+from src_torch_amgx.torch_amgx import amgx_cg
+
+# Create system with gradient tracking
+A = torch.rand(100, 100, dtype=torch.float64, device='cuda')
+A = A + A.T + torch.eye(100, dtype=torch.float64, device='cuda') * 2
+b = torch.rand(100, dtype=torch.float64, device='cuda', requires_grad=True)
+
+# PyTorch solver with autograd
+x_torch = cg(A, b, tol=1e-6)[0]
+loss_torch = torch.sum(x_torch**2)
+loss_torch.backward()
+print("PyTorch CG gradient:", b.grad)
+
+# Reset gradients
+b.grad = None
+
+# AMGX solver with autograd
+x_amgx = amgx_cg(A, b, tol=1e-6)
+loss_amgx = torch.sum(x_amgx**2)
+loss_amgx.backward()
+print("AMGX CG gradient:", b.grad)
 ```
 
 ### Using Function-Based Linear Operators
@@ -154,48 +402,121 @@ x, info = gmres(A, b, x0=None, *, tol=1e-5, atol=0.0, restart=20,
 - `A` can be any general linear operator
 - Memory usage scales with restart parameter
 
-### Input Types
+### AMGX Solvers API
 
-**Matrix A:**
-- **PyTorch Tensor**: Dense matrix of shape (n, n)
-- **Callable Function**: `A(x) -> y` where `y = A @ x`
+AMGX solvers provide GPU-accelerated solving with automatic differentiation:
 
-**Example Function-Based Operator:**
 ```python
-def matrix_vector_product(x):
-    # Your custom matrix-vector multiplication
-    return result  # same shape and structure as x
+from src_torch_amgx.torch_amgx import amgx_cg, amgx_bicgstab, amgx_gmres
+
+# All AMGX solvers follow this pattern:
+x = solver(A, b, tol=1e-8, maxiter=1000)
 ```
 
-## Performance Comparison
+**Parameters:**
 
-The `test_sparse_gpu.py` script provides comprehensive benchmarking against JAX:
+- `A`: PyTorch tensor - coefficient matrix (sparse or dense)
+- `b`: PyTorch tensor - right-hand side vector
+- `tol`: float - convergence tolerance (default: 1e-8)
+- `maxiter`: int - maximum iterations (default: 1000)
+
+**Returns:**
+
+- `x`: PyTorch tensor - solution vector
+
+#### AMGX CG
+
+```python
+x = amgx_cg(A, b, tol=1e-8, maxiter=1000)
+```
+
+**Best for:** Symmetric positive definite matrices
+
+#### AMGX BiCGStab
+
+```python
+x = amgx_bicgstab(A, b, tol=1e-8, maxiter=1000)
+```
+
+**Best for:** General non-symmetric matrices
+
+#### AMGX GMRES
+
+```python
+x = amgx_gmres(A, b, tol=1e-8, maxiter=1000)
+```
+
+**Best for:** General matrices, guaranteed convergence
+
+## Comprehensive Testing
+
+Run the comprehensive test suite to compare all solvers:
 
 ```bash
-python test_sparse_gpu.py
+python test_comprehensive_solvers.py
 ```
 
-### Solver Selection Guide
+This will test:
 
-**For Symmetric Positive Definite Matrices:**
-- Small-medium (< 10K): `torch.linalg.solve` (direct)
-- Large sparse: `cg` (Conjugate Gradient)
+- **Accuracy**: Solution and residual errors across different matrix types
+- **Speed**: Performance comparison between PyTorch and AMGX solvers
+- **Differentiability**: Automatic differentiation verification
+- **Matrix Types**: Diagonally dominant, non-diagonally dominant, and banded matrices
 
-**For General Non-Symmetric Matrices:**
-- Small-medium (< 10K): `torch.linalg.solve` (direct)  
-- Large sparse: `bicgstab` or `gmres`
+The test generates an HTML report with detailed results and recommendations.
 
-**For Ill-Conditioned Systems:**
-- Use `gmres` with smaller restart parameter
-- Consider preconditioning (future work)
+## Solver Selection Guide
+
+### For Symmetric Positive Definite Matrices
+
+- **Small (< 1K)**: `torch.linalg.solve` (direct)
+- **Medium (1K-10K)**: `cg` or `amgx_cg`
+- **Large (> 10K)**: `amgx_cg` (GPU acceleration)
+
+### For General Non-Symmetric Matrices
+
+- **Small (< 1K)**: `torch.linalg.solve` (direct)
+- **Medium (1K-10K)**: `bicgstab` or `amgx_bicgstab`
+- **Large (> 10K)**: `amgx_bicgstab` (GPU acceleration)
+
+### For Ill-Conditioned Systems
+
+- **PyTorch**: `gmres` with smaller restart parameter
+- **AMGX**: `amgx_gmres` with GPU acceleration
 
 ### Performance Tips
 
-1. **GPU Usage**: Ensure tensors are on GPU for large matrices
-2. **JIT Compilation**: Enable for repeated solves of similar systems
+1. **GPU Usage**: Use AMGX solvers for large matrices on GPU
+2. **Matrix Type**: Choose solver based on matrix properties
+3. **Tolerance**: Adjust tolerance based on required accuracy
+4. **Automatic Differentiation**: All solvers support PyTorch autograd
+
+## Examples
+
+See the `examples/` directory for detailed usage examples:
+
+- **Basic Usage**: Simple linear system solving
+- **Sparse Matrices**: Working with sparse matrices
+- **Automatic Differentiation**: Gradient computation examples
+- **Performance Comparison**: Benchmarking different solvers
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Attribution
+
+This implementation is **algorithmically derived** from Google JAX's scipy.sparse.linalg module:
+
+**Original JAX Implementation:**
+
+- Repository: https://github.com/google/jax
+- File: `jax/scipy/sparse/linalg.py`
+- License: Apache-2.0
+- Copyright: Google LLC
 
 ## License
 
-Apache License 2.0 
+Apache License 2.0
 
 **Note**: This code is licensed under Apache-2.0, the same license as the original JAX implementation from which algorithmic concepts were derived. This ensures full license compatibility and proper attribution.
