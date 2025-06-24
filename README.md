@@ -1,6 +1,6 @@
 # PyTorch Sparse Linear Algebra Solvers
 
-A comprehensive PyTorch implementation of sparse linear algebra solvers with GPU acceleration and automatic differentiation support.
+A comprehensive PyTorch implementation of sparse linear algebra solvers (CG, BiCGStab, GMRES, AMG) with GPU acceleration and automatic differentiation support.
 
 ## Latest Updates
 
