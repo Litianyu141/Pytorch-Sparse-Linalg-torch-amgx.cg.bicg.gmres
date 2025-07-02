@@ -1,6 +1,6 @@
 # PyTorch Sparse Linear Algebra Solvers
 
-A comprehensive PyTorch implementation of sparse linear algebra solvers (CG, BiCGStab, GMRES, AMG) with GPU acceleration and automatic differentiation support.
+A comprehensive PyTorch implementation of sparse linear algebra solvers (CG, BiCGStab, GMRES, AMG) with GPU acceleration and automatic differentiation support. (please check the perfemance test report at folder `test_report` before you dive into this repo)
 
 ## Latest Updates
 
@@ -11,12 +11,14 @@ A comprehensive PyTorch implementation of sparse linear algebra solvers (CG, BiC
 This library provides efficient implementations of iterative sparse linear system solvers for PyTorch tensors:
 
 ```
+├── examples/                # Example usage
+├── FVM_example/           # Solving Lid-driven cavity pressure possion equation
 ├── src/                           # PyTorch sparse solvers
 │   └── torch_sparse_linalg.py    # CG, BiCGStab, GMRES implementations
 ├── src_torch_amgx/                 # AMGX integration
 │   └── torch_amgx.py             # Differentiable AMGX solvers
-├── test_comprehensive_solvers.py  # Comprehensive testing suite
-├── examples/                      # Example applications
+├── test_torch_sparse_only_gpu.py  # Pytorch sparse solver testing suite
+├── test_torch_sparse_and_torch_amgx.py  # Pyamgx and Pytorch sparse solver testing suite
 └── README.md                     # This file
 ```
 
@@ -69,7 +71,7 @@ cd pytorch-sparse-linalg
 # Install dependencies
 pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
 pip3 install pip install -U "jax[cuda12]" 
-pip3 install numpy scipy matplotlib
+pip3 install numpy scipy matplotlib tabulate
 ```
 
 ### AMGX Installation (Optional)

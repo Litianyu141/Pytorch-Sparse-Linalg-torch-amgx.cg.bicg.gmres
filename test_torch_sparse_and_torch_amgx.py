@@ -16,6 +16,7 @@ import torch
 import numpy as np
 import time
 import pandas as pd
+import os
 from typing import List, Dict, Any
 from dataclasses import dataclass
 from scipy.sparse import csr_matrix
@@ -281,8 +282,15 @@ class SolverTester:
             print(f"  Testing {solver_name} differentiability...")
             
             try:
-                # Forward pass
+                # Forward pass with timing
+                start_time = time.time()
                 x, _ = solver_func(A_dense, b, tol=1e-6, maxiter=500)
+                solve_time = time.time() - start_time
+                
+                # Calculate solution accuracy (using a synthetic true solution)
+                # For gradient test, we don't have a true solution, so we measure residual
+                residual = A_dense @ x - b
+                residual_error = torch.norm(residual).item()
                 
                 # Create a simple loss function
                 loss = torch.sum(x**2)
@@ -294,6 +302,7 @@ class SolverTester:
                 if b.grad is not None and torch.isfinite(b.grad).all():
                     gradient_error = 0.0  # Successful gradient computation
                     print(f"    ✅ Gradient computation successful")
+                    print(f"    Time: {solve_time:.4f}s, Residual Error: {residual_error:.2e}")
                 else:
                     gradient_error = float('inf')
                     print(f"    ❌ Gradient computation failed")
@@ -305,9 +314,9 @@ class SolverTester:
                     solver_name=f"{solver_name} (Diff)",
                     matrix_type="diagonally_dominant",
                     matrix_size=matrix_size,
-                    solve_time=0.0,
-                    solution_error=0.0,
-                    residual_error=0.0,
+                    solve_time=solve_time,
+                    solution_error=0.0,  # No true solution for gradient test
+                    residual_error=residual_error,
                     converged=True,
                     gradient_error=gradient_error
                 )
@@ -331,8 +340,17 @@ class SolverTester:
                     if b.grad is not None:
                         b.grad.zero_()
                     
-                    # Forward pass
+                    # Forward pass with timing
+                    start_time = time.time()
                     x = solver_func(A, b, tol=1e-6, maxiter=500)
+                    solve_time = time.time() - start_time
+                    
+                    # Calculate residual error
+                    if A.is_sparse:
+                        residual = torch.sparse.mm(A, x.unsqueeze(1)).squeeze(1) - b
+                    else:
+                        residual = A @ x - b
+                    residual_error = torch.norm(residual).item()
                     
                     # Create a simple loss function
                     loss = torch.sum(x**2)
@@ -344,6 +362,7 @@ class SolverTester:
                     if b.grad is not None and torch.isfinite(b.grad).all():
                         gradient_error = 0.0  # Successful gradient computation
                         print(f"    ✅ {solver_name} gradient computation successful")
+                        print(f"    Time: {solve_time:.4f}s, Residual Error: {residual_error:.2e}")
                     else:
                         gradient_error = float('inf')
                         print(f"    ❌ {solver_name} gradient computation failed")
@@ -352,9 +371,9 @@ class SolverTester:
                         solver_name=f"{solver_name} (Diff)",
                         matrix_type="diagonally_dominant",
                         matrix_size=matrix_size,
-                        solve_time=0.0,
-                        solution_error=0.0,
-                        residual_error=0.0,
+                        solve_time=solve_time,
+                        solution_error=0.0,  # No true solution for gradient test
+                        residual_error=residual_error,
                         converged=True,
                         gradient_error=gradient_error
                     )
@@ -363,11 +382,17 @@ class SolverTester:
                 except Exception as e:
                     print(f"    ❌ {solver_name} differentiability test failed: {str(e)}")
     
-    def generate_report(self, filename: str = "solver_comparison_report.html"):
-        """Generate HTML report of test results"""
+    def generate_report(self, filename: str = "test_report/torch_amgx_test_result.md"):
+        """Generate Markdown report of test results"""
         if not self.results:
             print("No test results available for report generation.")
             return
+        
+        # Create test_report directory if it doesn't exist
+        report_dir = os.path.dirname(filename)
+        if report_dir and not os.path.exists(report_dir):
+            os.makedirs(report_dir)
+            print(f"📁 Created directory: {report_dir}")
         
         # Convert results to DataFrame
         data = []
@@ -385,38 +410,107 @@ class SolverTester:
         
         df = pd.DataFrame(data)
         
-        # Generate HTML report
-        html_content = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Sparse Matrix Solver Comparison Report</title>
-            <style>
-                body {{ font-family: Arial, sans-serif; margin: 40px; }}
-                h1, h2 {{ color: #333; }}
-                table {{ border-collapse: collapse; width: 100%; margin: 20px 0; }}
-                th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
-                th {{ background-color: #f2f2f2; }}
-                .summary {{ background-color: #f9f9f9; padding: 20px; margin: 20px 0; border-radius: 5px; }}
-            </style>
-        </head>
-        <body>
-            <h1>Sparse Matrix Solver Comparison Report</h1>
-            <div class="summary">
-                <h2>Test Summary</h2>
-                <p><strong>Total Tests:</strong> {len(self.results)}</p>
-                <p><strong>Matrix Types:</strong> {', '.join(set(r.matrix_type for r in self.results))}</p>
-                <p><strong>Solvers:</strong> {', '.join(set(r.solver_name for r in self.results))}</p>
-            </div>
+        # Generate Markdown table manually
+        def df_to_markdown_table(df):
+            """Convert DataFrame to Markdown table format"""
+            # Get column names
+            headers = list(df.columns)
             
-            <h2>Detailed Results</h2>
-            {df.to_html(index=False, escape=False)}
-        </body>
-        </html>
-        """
+            # Create header row
+            header_row = "| " + " | ".join(headers) + " |"
+            
+            # Create separator row
+            separator_row = "|" + "|".join([" --- " for _ in headers]) + "|"
+            
+            # Create data rows
+            data_rows = []
+            for _, row in df.iterrows():
+                row_str = "| " + " | ".join([str(row[col]) for col in headers]) + " |"
+                data_rows.append(row_str)
+            
+            # Combine all rows
+            table_lines = [header_row, separator_row] + data_rows
+            return "\n".join(table_lines)
         
-        with open(filename, 'w') as f:
-            f.write(html_content)
+        # Generate Markdown report
+        markdown_content = f"""# Sparse Matrix Solver Comparison Report
+
+## Test Summary
+
+- **Total Tests:** {len(self.results)}
+- **Matrix Types:** {', '.join(set(r.matrix_type for r in self.results))}
+- **Solvers:** {', '.join(set(r.solver_name for r in self.results))}
+
+## Detailed Results
+
+**Note:** Tests marked with `(Diff)` are differentiability tests that verify automatic differentiation support. For these tests:
+- Solution Error is set to 0.00e+00 (no true solution available)
+- Residual Error shows how well the solver satisfied Ax=b
+- Gradient Test column shows whether backpropagation succeeded
+
+{df_to_markdown_table(df)}
+
+## Performance Analysis
+
+### Convergence Results
+"""
+        
+        # Add convergence analysis
+        converged_count = len([r for r in self.results if r.converged])
+        total_count = len(self.results)
+        convergence_rate = (converged_count / total_count) * 100 if total_count > 0 else 0
+        
+        markdown_content += f"""
+- **Total Convergence Rate:** {convergence_rate:.1f}% ({converged_count}/{total_count})
+
+### Solver Performance Summary
+
+"""
+        
+        # Group results by solver
+        solver_stats = {}
+        for result in self.results:
+            solver = result.solver_name
+            if solver not in solver_stats:
+                solver_stats[solver] = {
+                    'tests': 0,
+                    'converged': 0,
+                    'total_time': 0,
+                    'min_error': float('inf'),
+                    'max_error': 0
+                }
+            
+            stats = solver_stats[solver]
+            stats['tests'] += 1
+            if result.converged:
+                stats['converged'] += 1
+            if result.solve_time < float('inf'):
+                stats['total_time'] += result.solve_time
+            if result.solution_error < float('inf') and result.solution_error < stats['min_error']:
+                stats['min_error'] = result.solution_error
+            if result.solution_error < float('inf') and result.solution_error > stats['max_error']:
+                stats['max_error'] = result.solution_error
+        
+        for solver, stats in solver_stats.items():
+            convergence_rate = (stats['converged'] / stats['tests']) * 100
+            avg_time = stats['total_time'] / stats['tests'] if stats['tests'] > 0 else 0
+            markdown_content += f"""
+#### {solver}
+- **Convergence Rate:** {convergence_rate:.1f}% ({stats['converged']}/{stats['tests']})
+- **Average Solve Time:** {avg_time:.4f}s
+- **Best Solution Error:** {stats['min_error']:.2e}
+- **Worst Solution Error:** {stats['max_error']:.2e}
+"""
+        
+        # Add timestamp
+        from datetime import datetime
+        markdown_content += f"""
+---
+*Report generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*
+"""
+        
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write(markdown_content)
         
         print(f"📊 Report saved to {filename}")
 
@@ -473,7 +567,7 @@ def main():
     print(f"\n📄 Generating Report")
     print("-" * 50)
     
-    tester.generate_report("solver_comparison_report.html")
+    tester.generate_report()
     
     # Print summary
     print(f"\n📊 Test Summary")
@@ -487,7 +581,7 @@ def main():
         print(f"🏃 Fastest solver: {fastest.solver_name} ({fastest.solve_time:.4f}s)")
         print(f"🎯 Most accurate solver: {most_accurate.solver_name} (error: {most_accurate.solution_error:.2e})")
     
-    print(f"\n✅ Testing completed! Check solver_comparison_report.html for detailed results.")
+    print(f"\n✅ Testing completed! Check test_report/solver_comparison_report.md for detailed results.")
 
 if __name__ == "__main__":
     main()
