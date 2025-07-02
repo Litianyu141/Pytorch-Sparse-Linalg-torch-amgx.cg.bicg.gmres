@@ -67,7 +67,9 @@ git clone https://github.com/your-repo/pytorch-sparse-linalg.git
 cd pytorch-sparse-linalg
 
 # Install dependencies
-pip install torch numpy scipy pandas matplotlib
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+pip3 install pip install -U "jax[cuda12]" 
+pip3 install numpy scipy matplotlib
 ```
 
 ### AMGX Installation (Optional)
@@ -150,9 +152,9 @@ This configuration provides optimal performance for both PyTorch and AMGX solver
 
 After installation, verify everything is working correctly:
 
-```bash
+```python
 # Run the verification script
-src_torch_amgx/verify_installation.py
+python verify_installation.py
 ```
 
 This script will check:

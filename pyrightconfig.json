@@ -8,8 +8,4 @@
     "reportMissingImports": "none",
     "reportMissingTypeStubs": false,
     "typeCheckingMode": "off",
-    "python.analysis.diagnosticSeverityOverrides": {
-        "reportGeneralTypeIssues": "none",
-        "reportOptionalMemberAccess": "none",
-    },
   }
