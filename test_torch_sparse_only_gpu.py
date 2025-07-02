@@ -1444,7 +1444,7 @@ def analyze_comparison_results(results):
                 avg_time = np.mean(times)
                 print(f"  {solver_key:<20}: {avg_time:.3f}s")
 
-def save_results_to_markdown(results, filename="sparse_solver_benchmark_results.md"):
+def save_results_to_markdown(results, filename="torch_sparse_test_result.md"):
     """Save test results as Markdown format report"""
     import datetime
     
