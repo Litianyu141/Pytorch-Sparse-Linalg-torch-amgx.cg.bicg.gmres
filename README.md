@@ -89,7 +89,7 @@ nvcc --version  # Should show CUDA 12.0+
 
 ```bash
 # Clone AMGX repository
-git clone https://github.com/NVIDIA/AMGX.git
+git clone --recursive git@github.com:nvidia/amgx.git
 cd AMGX
 
 # Create build directory
@@ -152,7 +152,7 @@ After installation, verify everything is working correctly:
 
 ```bash
 # Run the verification script
-python verify_installation.py
+src_torch_amgx/verify_installation.py
 ```
 
 This script will check:
