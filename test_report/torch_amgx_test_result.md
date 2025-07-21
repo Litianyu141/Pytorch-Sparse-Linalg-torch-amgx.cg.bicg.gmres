@@ -23,8 +23,8 @@
 | PyTorch CG | non_diagonally_dominant | 200 | 0.1853 | Failed | Failed | ❌ | N/A |
 | PyTorch BiCGStab | non_diagonally_dominant | 200 | 0.0281 | 9.43e+02 | 7.74e+03 | ❌ | N/A |
 | PyTorch GMRES | non_diagonally_dominant | 200 | 16.0284 | 1.33e+01 | 1.07e+02 | ❌ | N/A |
-| AMGX CG | non_diagonally_dominant | 200 | 0.1001 | Failed | Failed | ✅ | N/A |
-| AMGX BiCGStab | non_diagonally_dominant | 200 | 0.1497 | Failed | Failed | ✅ | N/A |
+| AMGX CG | non_diagonally_dominant | 200 | 0.1001 | Failed | Failed | ❌ | N/A |
+| AMGX BiCGStab | non_diagonally_dominant | 200 | 0.1497 | Failed | Failed | ❌ | N/A |
 | PyTorch CG | banded | 200 | 0.1786 | 2.81e+03 | 7.70e+03 | ❌ | N/A |
 | PyTorch BiCGStab | banded | 200 | 0.0171 | 8.86e-07 | 3.27e-07 | ✅ | N/A |
 | PyTorch GMRES | banded | 200 | 0.0655 | 1.14e-08 | 7.15e-09 | ✅ | N/A |
