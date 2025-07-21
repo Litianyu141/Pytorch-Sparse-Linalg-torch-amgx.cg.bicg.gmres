@@ -74,6 +74,107 @@ pip3 install pip install -U "jax[cuda12]"
 pip3 install numpy scipy matplotlib tabulate
 ```
 
+## PyTorch 2.7.0 + CuDSS Compilation Guide
+
+This section provides a complete step-by-step guide to compile PyTorch 2.7.0 with CuDSS support from source.
+
+### Prerequisites
+
+- Ubuntu 22.04 (or compatible Linux distribution)
+- CUDA 12.8
+- GCC 12.3.0 or compatible
+- CMake 3.22.1 or higher
+- Python 3.11
+
+### Step 1: Install CuDSS Library
+
+Install CuDSS first on Ubuntu 22.04. If your system is different, please refer to NVIDIA's official site [[html]](https://developer.nvidia.com/cudss-downloads?target_os=Linux&target_arch=x86_64&Distribution=Ubuntu&target_version=22.04&target_type=deb_local).
+
+```bash
+wget https://developer.download.nvidia.com/compute/cudss/0.6.0/local_installers/cudss-local-repo-ubuntu2204-0.6.0_0.6.0-1_amd64.deb
+sudo dpkg -i cudss-local-repo-ubuntu2204-0.6.0_0.6.0-1_amd64.deb
+sudo cp /var/cudss-local-repo-ubuntu2204-0.6.0/cudss-*-keyring.gpg /usr/share/keyrings/
+sudo apt-get update
+sudo apt-get -y install cudss
+```
+
+### Step 2: Create Conda Environment
+
+```bash
+# Create a new conda environment with Python 3.11
+conda create -n FVGN-pt2.7-sp python=3.11 -y
+conda activate FVGN-pt2.7-sp
+```
+
+### Step 3: Download PyTorch Source Code
+
+```bash
+# Clone PyTorch repository
+cd /path/to/your/workspace  # Change to your preferred directory
+git clone --recursive https://github.com/pytorch/pytorch
+cd pytorch
+
+# Checkout to PyTorch 2.7.0 release
+git checkout v2.7.0
+git submodule sync
+git submodule update --init --recursive
+```
+
+### Step 4: Install Compilation Dependencies
+
+```bash
+# Install build dependencies via conda
+conda install cmake ninja -y
+
+# Install Python dependencies
+pip install -r requirements.txt
+pip install mkl-static mkl-include
+```
+
+### Step 5: Compile PyTorch with CuDSS Support
+
+```bash
+# Set environment variables for compilation
+export CMAKE_PREFIX_PATH="${CONDA_PREFIX:-'$(dirname $(which conda))/../'}:${CMAKE_PREFIX_PATH}"
+export USE_CUDSS=1
+export MAX_JOBS=24  # Use half of your CPU cores (adjust based on your system)
+
+# Compile and install PyTorch
+python setup.py develop
+```
+
+**Note**: The compilation process may take 1-2 hours depending on your system. The `MAX_JOBS=24` setting uses 24 CPU cores; adjust this to half of your available cores for optimal performance.
+
+### Step 6: Verify Installation
+
+```bash
+# Test PyTorch installation
+python -c "
+import torch
+print('PyTorch version:', torch.__version__)
+print('CUDA available:', torch.cuda.is_available())
+print('CUDA version:', torch.version.cuda)
+print('Number of GPUs:', torch.cuda.device_count())
+
+# Test torch.sparse.spsolve with CuDSS
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+row_indices = torch.tensor([0, 0, 1, 1, 2, 2], dtype=torch.long)
+col_indices = torch.tensor([0, 1, 1, 2, 0, 2], dtype=torch.long)
+values = torch.tensor([2.0, 1.0, 3.0, 1.0, 1.0, 4.0], dtype=torch.float32)
+indices = torch.stack([row_indices, col_indices])
+sparse_coo = torch.sparse_coo_tensor(indices, values, (3, 3), dtype=torch.float32, device=device)
+sparse_csr = sparse_coo.to_sparse_csr()
+b = torch.tensor([1.0, 2.0, 3.0], dtype=torch.float32, device=device)
+
+try:
+    x = torch.sparse.spsolve(sparse_csr, b)
+    print('✅ torch.sparse.spsolve with CuDSS works!')
+    print('Solution:', x)
+except Exception as e:
+    print('❌ Error:', e)
+"
+```
+
 ### AMGX Installation (Optional)
 
 For GPU-accelerated AMGX solvers, you need to compile AMGX and pyamgx from source:
