@@ -128,17 +128,17 @@ print_availability_report()
 
 ```bash
 # Install directly from GitHub (recommended)
-pip install git+https://github.com/Litianyu141/Pytorch-sparse-solve.git
+pip install git+https://github.com/Litianyu141/Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres.git
 
 # Or with specific branch/tag
-pip install git+https://github.com/Litianyu141/Pytorch-sparse-solve.git@main
+pip install git+https://github.com/Litianyu141/Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres.git@main
 ```
 
 ### Local Development Install
 
 ```bash
 # Clone the repository
-git clone https://github.com/Litianyu141/Pytorch-sparse-solve.git
+git clone https://github.com/Litianyu141/Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres.git
 cd Pytorch-sparse-solve
 
 # Install in editable mode
@@ -161,7 +161,7 @@ conda activate pytorch_sparse
 pip install torch>=2.0.0
 
 # Install the package from GitHub
-pip install git+https://github.com/Litianyu141/Pytorch-sparse-solve.git
+pip install git+https://github.com/Litianyu141/Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres.git
 ```
 
 ### Module B Installation (PyAMGX)
