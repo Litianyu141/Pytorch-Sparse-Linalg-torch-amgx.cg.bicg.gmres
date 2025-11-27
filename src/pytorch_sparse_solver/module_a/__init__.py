@@ -14,6 +14,7 @@ Features:
 - GPU acceleration via PyTorch's CUDA support
 - Support for function-based linear operators (matrix-free methods)
 - High precision computation (float64 by default)
+- Differentiable solvers with autograd support (implicit differentiation)
 
 Example:
     >>> import torch
@@ -28,15 +29,33 @@ Example:
     >>> # Solve using CG
     >>> x, info = cg(A, b, tol=1e-6)
     >>> print(f"Converged: {info == 0}")
+
+    >>> # Differentiable solve (for gradient computation)
+    >>> from pytorch_sparse_solver.module_a import cg_differentiable
+    >>> b.requires_grad = True
+    >>> x = cg_differentiable(A, b, tol=1e-6)
+    >>> loss = x.sum()
+    >>> loss.backward()  # Computes gradient via implicit differentiation
 """
 
-from .torch_sparse_linalg import cg, bicgstab, gmres
+from .torch_sparse_linalg import (
+    cg, bicgstab, gmres,
+    cg_differentiable, bicgstab_differentiable, gmres_differentiable,
+    LinearSolveFunction
+)
 from .torch_tree_util import tree_leaves, tree_map, tree_flatten, tree_unflatten, Partial
 
 __all__ = [
+    # Standard solvers
     'cg',
     'bicgstab',
     'gmres',
+    # Differentiable solvers (autograd support)
+    'cg_differentiable',
+    'bicgstab_differentiable',
+    'gmres_differentiable',
+    'LinearSolveFunction',
+    # Tree utilities
     'tree_leaves',
     'tree_map',
     'tree_flatten',

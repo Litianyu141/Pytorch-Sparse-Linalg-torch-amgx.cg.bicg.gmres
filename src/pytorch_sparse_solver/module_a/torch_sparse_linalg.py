@@ -28,21 +28,39 @@ from functools import partial
 import operator
 from typing import Any, Callable, Optional, Tuple, Union
 
-# JIT compilation for PyTorch (similar to JAX's jit) - temporarily disabled
+# JIT compilation for PyTorch (similar to JAX's jit)
+# Set to True to enable torch.compile for better performance
+# Note: JIT may cause issues with some PyTorch/triton versions
+# Disable if you encounter compilation errors
+_JIT_ENABLED = False
+
 def jit_compile(func):
-    """Apply JIT compilation to functions - currently disabled due to indexing issues."""
-    # Temporarily disable JIT for complex operations to avoid compilation issues
-    return func  # Disable JIT compilation temporarily
-    
-    # Below is the code for when JIT is enabled (kept for reference)
-    # import torch._dynamo
-    # torch._dynamo.config.cache_size_limit = 128  # Increase cache size
-    
-    # return torch.compile(func)
+    """Apply JIT compilation to functions using torch.compile.
+
+    Uses 'eager' backend by default which is more compatible across environments.
+    Falls back to original function if compilation fails.
+    """
+    if not _JIT_ENABLED:
+        return func
+
+    try:
+        import torch._dynamo
+        torch._dynamo.config.cache_size_limit = 128  # Increase cache size
+        # Use 'eager' backend for better compatibility (no triton dependency)
+        # Alternative backends: 'inductor' (requires triton), 'aot_eager'
+        return torch.compile(func, dynamic=True, backend="eager")
+    except Exception:
+        # Fall back to original function if compilation fails
+        return func
 
 # Use highest precision available
 DEFAULT_DTYPE = torch.float64
 DEFAULT_COMPLEX_DTYPE = torch.complex128
+
+# Precomputed constants to avoid creating tensors in loops
+# These are Python floats for device-independent usage
+_SQRT2 = 1.4142135623730951  # math.sqrt(2)
+_INV_SQRT2 = 0.7071067811865476  # 1/math.sqrt(2)
 
 # Precision aliases - use highest precision like JAX
 def _dot(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
@@ -110,12 +128,26 @@ def _vdot_real_part(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
 
 
 def _vdot_real_tree(x: Any, y: Any) -> torch.Tensor:
-    """Real part of vdot for PyTrees."""
+    """Real part of vdot for PyTrees.
+
+    Optimized version that handles the common case where x and y are simple tensors.
+    """
+    # Fast path for single tensors (most common case)
+    if isinstance(x, torch.Tensor) and isinstance(y, torch.Tensor):
+        return _vdot_real_part(x, y)
+    # General case for PyTrees
     return sum(tree_leaves(tree_map(_vdot_real_part, x, y)))
 
 
 def _vdot_tree(x: Any, y: Any) -> torch.Tensor:
-    """Complex vdot for PyTrees."""
+    """Complex vdot for PyTrees.
+
+    Optimized version that handles the common case where x and y are simple tensors.
+    """
+    # Fast path for single tensors (most common case)
+    if isinstance(x, torch.Tensor) and isinstance(y, torch.Tensor):
+        return _vdot(x, y)
+    # General case for PyTrees
     return sum(tree_leaves(tree_map(_vdot, x, y)))
 
 
@@ -182,52 +214,62 @@ def _identity(x: Any) -> Any:
     return x
 
 
-def _safe_normalize(x: Any, thresh: Optional[torch.Tensor] = None) -> Tuple[Any, torch.Tensor]:
+def _safe_normalize(x: Any, thresh: Optional[torch.Tensor] = None, strict_jax: bool = True) -> Tuple[Any, torch.Tensor]:
     """
     Returns the L2-normalized vector (which can be a pytree) x, and optionally
     the computed norm. If the computed norm is less than the threshold `thresh`,
     which by default is the machine precision of x's dtype, it will be
     taken to be 0, and the normalized x to be the zero vector.
+
+    Args:
+        x: Input vector or pytree
+        thresh: Threshold for considering norm as zero
+        strict_jax: If True, use JAX's exact implementation. If False, use more
+                   aggressive thresholds for GPU numerical stability.
     """
     norm = _norm(x)
-    
+
     # Get dtype from first leaf
     first_leaf = tree_leaves(x)[0]
     dtype = first_leaf.dtype
+    device = first_leaf.device
+
     if torch.is_complex(first_leaf):
         real_dtype = torch.float64 if dtype == torch.complex128 else torch.float32
     else:
         real_dtype = dtype
-    
+
     if thresh is None:
-        # Use adaptive threshold based on device and norm magnitude for better stability
         base_eps = torch.finfo(real_dtype).eps
-        
-        # More aggressive threshold for GPU to handle numerical instability
-        if first_leaf.device.type == 'cuda':
-            # GPU: use larger threshold scaled by norm magnitude
-            thresh = base_eps * 1000 * torch.maximum(norm, torch.tensor(1.0, device=norm.device))
+        if strict_jax:
+            # JAX's exact behavior: just use machine epsilon
+            thresh = base_eps
         else:
-            # CPU: use moderate threshold
-            thresh = base_eps * 100
-    
+            # More aggressive threshold for GPU to handle numerical instability
+            if device.type == 'cuda':
+                # GPU: use larger threshold scaled by norm magnitude
+                thresh = base_eps * 1000 * torch.maximum(norm, torch.tensor(1.0, device=device))
+            else:
+                # CPU: use moderate threshold
+                thresh = base_eps * 100
+
     # Convert thresh to tensor with proper device if it's not already a tensor
     if not isinstance(thresh, torch.Tensor):
-        thresh = torch.tensor(thresh, device=norm.device, dtype=real_dtype)
-    
+        thresh = torch.tensor(thresh, device=device, dtype=real_dtype)
+
+    # Convert to real type (following JAX's thresh.astype(dtype).real)
+    if torch.is_complex(thresh):
+        thresh = thresh.real
+
     use_norm = norm > thresh
-    
-    # Avoid division by very small numbers with additional safety for GPU
-    if first_leaf.device.type == 'cuda':
-        # More conservative normalization on GPU
-        safe_norm = torch.where(use_norm, 
-                               torch.maximum(norm, thresh * 10), 
-                               torch.tensor(1.0, device=norm.device, dtype=norm.dtype))
-    else:
-        safe_norm = torch.where(use_norm, norm, torch.tensor(1.0, device=norm.device, dtype=norm.dtype))
-    
-    normalized_x = tree_map(lambda y: torch.where(use_norm, y / safe_norm, torch.zeros_like(y)), x)
-    norm = torch.where(use_norm, norm, torch.tensor(0.0, device=norm.device, dtype=norm.dtype))
+
+    # Following JAX exactly: simple normalization with no GPU-specific handling
+    # JAX: normalized_x = tree_map(lambda y: jnp.where(use_norm, y / norm_cast, 0.0), x)
+    norm_cast = norm.to(dtype)
+    normalized_x = tree_map(
+        lambda y: torch.where(use_norm, y / norm_cast, torch.zeros_like(y)), x
+    )
+    norm = torch.where(use_norm, norm, torch.tensor(0.0, device=device, dtype=norm.dtype))
     return normalized_x, norm
 
 
@@ -249,10 +291,11 @@ def _iterative_classical_gram_schmidt(Q: Any, x: Any, xnorm: torch.Tensor, max_i
     Q0 = tree_leaves(Q)[0]
     device = Q0.device
     dtype = Q0.dtype
-    
+
     r = torch.zeros(Q0.shape[-1], dtype=dtype, device=device)
     q = x
-    xnorm_scaled = xnorm / torch.sqrt(torch.tensor(2.0, device=device))
+    # Use precomputed constant instead of torch.sqrt(torch.tensor(2.0))
+    xnorm_scaled = xnorm * _INV_SQRT2
 
     def body_function(carry):
         k, q, r, qnorm_scaled = carry
@@ -261,32 +304,20 @@ def _iterative_classical_gram_schmidt(Q: Any, x: Any, xnorm: torch.Tensor, max_i
         q = _sub(q, Qh)
         r = r + h
 
-        # Inner loop for qnorm computation
-        def qnorm_cond(inner_carry):
-            inner_k, not_done, _, _ = inner_carry
-            return torch.logical_and(not_done, inner_k < (max_iterations - 1))
-
-        def qnorm_body(inner_carry):
-            inner_k, _, q_inner, qnorm_scaled_inner = inner_carry
-            _, qnorm = _safe_normalize(q_inner)
-            qnorm_scaled_new = qnorm / torch.sqrt(torch.tensor(2.0, device=device))
-            return (inner_k, torch.tensor(False), q_inner, qnorm_scaled_new)
-
-        init = (k, torch.tensor(True), q, qnorm_scaled)
-        # Simple implementation without full while_loop
+        # Compute new qnorm_scaled using precomputed constant
         _, qnorm = _safe_normalize(q)
-        qnorm_scaled = qnorm / torch.sqrt(torch.tensor(2.0, device=device))
-        
+        qnorm_scaled = qnorm * _INV_SQRT2
+
         return (k + 1, q, r, qnorm_scaled)
 
     def cond_function(carry):
         k, _, r_inner, qnorm_scaled_inner = carry
         _, rnorm = _safe_normalize(r_inner)
-        return torch.logical_and(k < (max_iterations - 1), rnorm < qnorm_scaled_inner)
+        return k < (max_iterations - 1) and rnorm < qnorm_scaled_inner
 
     # Initial iteration
     k, q, r, qnorm_scaled = body_function((0, q, r, xnorm_scaled))
-    
+
     # Additional iterations if needed
     while k < max_iterations - 1:
         _, rnorm = _safe_normalize(r)
@@ -357,65 +388,103 @@ def _kth_arnoldi_iteration(k: int, A: Callable, M: Callable, V: Any, H: torch.Te
     return V, H, breakdown
 
 
-def _lstsq(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-    """Least squares solve - faster than torch.linalg.lstsq for our use case."""
-    # Ensure b is 2D
-    if b.ndim == 1:
+def _lstsq(a: torch.Tensor, b: torch.Tensor, method: str = 'normal_equations') -> torch.Tensor:
+    """Least squares solve with optional method selection.
+
+    Args:
+        a: Matrix A in the least squares problem min ||Ax - b||
+        b: Right-hand side vector
+        method: 'normal_equations' (JAX default, faster) or 'lstsq' (more robust)
+
+    JAX uses normal equations: solve(A.T @ A, A.T @ b) with assume_a='pos'
+    This is faster than general lstsq for well-conditioned problems.
+    """
+    # Ensure b is 2D for consistent handling
+    squeeze_output = b.ndim == 1
+    if squeeze_output:
         b = b.unsqueeze(-1)
-    
-    # Use torch.linalg.lstsq for robustness
-    solution = torch.linalg.lstsq(a, b, rcond=None).solution
+
+    if method == 'normal_equations':
+        # JAX's exact implementation: faster than lstsq for our use case
+        # a2 = _dot(a.T.conj(), a)
+        # b2 = _dot(a.T.conj(), b)
+        # return solve(a2, b2, assume_a='pos')
+        a_conj_t = a.conj().T
+        a2 = torch.matmul(a_conj_t, a)
+        b2 = torch.matmul(a_conj_t, b)
+        # Use cholesky_solve for positive definite systems (like scipy's assume_a='pos')
+        try:
+            L = torch.linalg.cholesky(a2)
+            solution = torch.cholesky_solve(b2, L)
+        except RuntimeError:
+            # Fall back to general solve if Cholesky fails (matrix not positive definite)
+            solution = torch.linalg.solve(a2, b2)
+    else:
+        # Use torch.linalg.lstsq for robustness
+        solution = torch.linalg.lstsq(a, b, rcond=None).solution
+
+    if squeeze_output:
+        solution = solution.squeeze(-1)
     return solution
 
 
-def _gmres_batched(A: Callable, b: Any, x0: Any, unit_residual: Any, 
-                  residual_norm: torch.Tensor, ptol: torch.Tensor, 
+def _gmres_batched(A: Callable, b: Any, x0: Any, unit_residual: Any,
+                  residual_norm: torch.Tensor, ptol: torch.Tensor,
                   restart: int, M: Callable) -> Tuple[Any, Any, torch.Tensor]:
     """
     Implements a single restart of GMRES using batched approach.
     This implementation solves a dense linear problem instead of building
     a QR factorization during the Arnoldi process.
+
+    Note: We use H with shape (restart+1, restart), which is the transpose of JAX's
+    (restart, restart+1). The math is equivalent, just with different conventions.
     """
     # Get dtype and device info
     first_leaf = tree_leaves(b)[0]
     dtype = first_leaf.dtype
     device = first_leaf.device
 
-    # Initialize V with padding for restart vectors
+    # Initialize V with padding for restart vectors (same as JAX)
     V = tree_map(
-        lambda x: torch.cat([x.unsqueeze(-1), 
+        lambda x: torch.cat([x.unsqueeze(-1),
                            torch.zeros(x.shape + (restart,), dtype=dtype, device=device)], dim=-1),
         unit_residual,
     )
-    
-    # Initialize Hessenberg matrix correctly as zeros
+
+    # Initialize Hessenberg matrix - JAX uses eye(restart, restart+1)
+    # We use the transpose convention: (restart+1, restart)
+    # Initialize to zeros instead of identity since we set columns explicitly
     H = torch.zeros(restart + 1, restart, dtype=dtype, device=device)
 
     k = 0
     breakdown = False
-    
+
     # Arnoldi process
     while k < restart and not breakdown:
         V, H, breakdown = _kth_arnoldi_iteration(k, A, M, V, H)
         k += 1
 
-    # Solve least squares problem correctly
+    # Solve least squares problem
+    # JAX: beta_vec = zeros(restart+1).at[0].set(residual_norm)
+    # JAX: y = _lstsq(H.T, beta_vec)  where H is (restart, restart+1)
+    # Our convention: H is (restart+1, restart), so we solve H @ y = beta_vec directly
     beta_vec = torch.zeros(restart + 1, dtype=dtype, device=device)
     beta_vec[0] = residual_norm.to(dtype)
-    
-    # Use the actual computed H matrix - solve H[:k+1, :k] @ y = beta_vec[:k+1] 
+
     if k > 0:
-        H_rect = H[:k+1, :k]  # (k+1) x k matrix - correct dimensions for GMRES
-        # Solve the least squares problem: min ||H_rect @ y - beta_vec[:k+1]||
-        y = torch.linalg.lstsq(H_rect, beta_vec[:k+1], rcond=None).solution
-        
+        # Use only the computed portion of H
+        H_rect = H[:k+1, :k]  # (k+1) x k matrix
+        # Solve min ||H_rect @ y - beta_vec[:k+1]||
+        y = _lstsq(H_rect, beta_vec[:k+1])
+
         # Ensure y has the right shape
         if y.dim() > 1:
             y = y.squeeze(-1)
     else:
         y = torch.zeros(0, dtype=dtype, device=device)
-    
-    # Compute solution update
+
+    # Compute solution update: dx = V[:, :k] @ y
+    # JAX: dx = tree_map(lambda X: _dot(X[..., :-1], y), V)
     dx = tree_map(lambda X: torch.matmul(X[..., :k], y), V)
 
     x = _add(x0, dx)
@@ -745,20 +814,23 @@ def _cg_solve(A: Callable, b: Any, x0: Any, *, maxiter: int, tol: float = 1e-5,
     dtype = first_leaf.dtype
     gamma0 = _vdot_real_tree(r0, z0).to(dtype)
     
-    # Main CG iteration
+    # Main CG iteration - following JAX's cond_fun and body_fun pattern
+    # JAX: cond_fun checks (k < maxiter) & (rs > atol2) together
     x, r, gamma, p, k = x0, r0, gamma0, p0, 0
-    
-    while k < maxiter:
-        # Check convergence
+
+    while True:
+        # Check convergence first (following JAX's cond_fun pattern)
+        # This combines the loop condition with convergence check
         if M is _identity:
             rs = gamma.real if torch.is_complex(gamma) else gamma
         else:
             rs = _vdot_real_tree(r, r)
-        
-        if rs <= atol2 or k >= maxiter:
+
+        # Combined condition check (like JAX's cond_fun)
+        if k >= maxiter or rs <= atol2:
             break
-            
-        # CG update step
+
+        # CG update step (body_fun)
         Ap = A(p)
         alpha = gamma / _vdot_real_tree(p, Ap).to(dtype)
         x = _add(x, _mul(alpha, p))
@@ -769,7 +841,7 @@ def _cg_solve(A: Callable, b: Any, x0: Any, *, maxiter: int, tol: float = 1e-5,
         p = _add(z, _mul(beta, p))
         gamma = gamma_new
         k += 1
-    
+
     return x
 
 
@@ -777,83 +849,107 @@ def _bicgstab_solve(A: Callable, b: Any, x0: Any, *, maxiter: int, tol: float = 
                    atol: float = 0.0, M: Callable = None) -> Any:
     """
     BiCGStab solver implementation following JAX exactly.
+
+    Reference: https://en.wikipedia.org/wiki/Biconjugate_gradient_stabilized_method#Preconditioned_BiCGSTAB
     """
     if M is None:
         M = _identity
-    
+
     # Tolerance handling uses the "non-legacy" behavior of scipy.sparse.linalg.bicgstab
     bs = _vdot_real_tree(b, b)
     atol2 = torch.maximum(torch.square(torch.tensor(tol, device=bs.device)) * bs,
                          torch.square(torch.tensor(atol, device=bs.device)))
 
-    # Initial values
+    # Initial values - following JAX exactly
     r0 = _sub(b, A(x0))
-    rhat = r0  # rhat stays constant throughout
-    
+    rhat = r0  # rhat stays constant throughout (shadow residual)
+
     # Get proper dtype from first leaf
     first_leaf = tree_leaves(r0)[0]
     device = first_leaf.device
     dtype = first_leaf.dtype
-    
-    # Initialize scalar values
+
+    # Initialize scalar values with proper dtype conversion (following JAX's _convert_element_type)
     alpha = torch.tensor(1.0, dtype=dtype, device=device)
     omega = torch.tensor(1.0, dtype=dtype, device=device)
     rho = torch.tensor(1.0, dtype=dtype, device=device)
-    
-    # Initial vectors
+
+    # Initial vectors - JAX uses: initial_value = (x0, r0, r0, alpha0, omega0, rho0, r0, r0, 0)
+    # (x, r, rhat, alpha, omega, rho, p, q, k)
     x, r, p, q, k = x0, r0, r0, r0, 0
-    
+
     while k < maxiter and k >= 0:  # k < 0 indicates breakdown
         # Check convergence
         rs = _vdot_real_tree(r, r)
         if rs <= atol2:
             break
-            
+
         # BiCGStab update step
         rho_new = _vdot_tree(rhat, r)
-        
-        # Check for breakdown
-        if torch.abs(rho_new) < torch.finfo(dtype).eps:
+
+        # Check for breakdown (rho = 0)
+        if torch.abs(rho_new) < torch.finfo(dtype).eps * torch.abs(rho):
             k = -10  # rho breakdown
             break
-            
+
         beta = rho_new / rho * alpha / omega
-        p = _add(r, _mul(beta, _sub(p, _mul(omega, q))))
-        phat = M(p)
-        q = A(phat)
-        alpha_new = rho_new / _vdot_tree(rhat, q)
-        
-        # Check for breakdown
+        p_ = _add(r, _mul(beta, _sub(p, _mul(omega, q))))
+        phat = M(p_)
+        q_ = A(phat)
+        alpha_new = rho_new / _vdot_tree(rhat, q_)
+
+        # Check for breakdown (alpha = 0)
         if torch.abs(alpha_new) < torch.finfo(dtype).eps:
             k = -11  # alpha breakdown
             break
-            
-        s = _sub(r, _mul(alpha_new, q))
-        
-        # Check for early exit
-        s_norm = _vdot_real_tree(s, s)
-        if s_norm < atol2:
-            x = _add(x, _mul(alpha_new, phat))
-            break
-            
+
+        s = _sub(r, _mul(alpha_new, q_))
+
+        # Check for early exit - following JAX's jnp.where pattern
+        exit_early = _vdot_real_tree(s, s) < atol2
+
         shat = M(s)
         t = A(shat)
-        omega_new = _vdot_tree(t, s) / _vdot_tree(t, t)
-        
-        # Check for breakdown
-        if torch.abs(omega_new) < torch.finfo(dtype).eps:
+
+        # Compute omega_new with protection against division by zero
+        t_norm_sq = _vdot_tree(t, t)
+        if torch.abs(t_norm_sq) < torch.finfo(dtype).eps:
+            omega_new = torch.tensor(0.0, dtype=dtype, device=device)
+        else:
+            omega_new = _vdot_tree(t, s) / t_norm_sq
+
+        # Check for breakdown (omega = 0)
+        # JAX: k_ = jnp.where((omega_ == 0) | (alpha_ == 0), -11, k + 1)
+        if torch.abs(omega_new) < torch.finfo(dtype).eps and not exit_early:
             k = -11  # omega breakdown
             break
-            
-        x = _add(x, _add(_mul(alpha_new, phat), _mul(omega_new, shat)))
-        r = _sub(s, _mul(omega_new, t))
-        
+
+        # Update x using jnp.where pattern: choose between early exit and full update
+        # JAX: x_ = tree_map(partial(jnp.where, exit_early),
+        #                    _add(x, _mul(alpha_, phat)),
+        #                    _add(x, _add(_mul(alpha_, phat), _mul(omega_, shat))))
+        x_early = _add(x, _mul(alpha_new, phat))
+        x_full = _add(x, _add(_mul(alpha_new, phat), _mul(omega_new, shat)))
+        x = tree_map(lambda xe, xf: torch.where(exit_early, xe, xf), x_early, x_full)
+
+        # Update r using jnp.where pattern
+        # JAX: r_ = tree_map(partial(jnp.where, exit_early), s, _sub(s, _mul(omega_, t)))
+        r_early = s
+        r_full = _sub(s, _mul(omega_new, t))
+        r = tree_map(lambda re, rf: torch.where(exit_early, re, rf), r_early, r_full)
+
         # Update for next iteration
+        p = p_
+        q = q_
         rho = rho_new
         alpha = alpha_new
         omega = omega_new
         k += 1
-    
+
+        # Early exit after update (following JAX flow)
+        if exit_early:
+            break
+
     return x
 
 
@@ -1019,3 +1115,183 @@ def bicgstab(A: Union[torch.Tensor, Callable[[Any], Any]], b: Any, x0: Optional[
     """
     return _isolve(_bicgstab_solve, A=A, b=b, x0=x0, tol=tol, atol=atol,
                    maxiter=maxiter, M=M)
+
+
+# =============================================================================
+# Autograd Support - Implicit Differentiation
+# =============================================================================
+
+class LinearSolveFunction(torch.autograd.Function):
+    """
+    Custom autograd function for linear solves with implicit differentiation.
+
+    Implements the adjoint method for computing gradients through linear solves:
+    For Ax = b, the gradient w.r.t. b is: ∂L/∂b = A^{-T} (∂L/∂x)
+
+    This follows JAX's custom_linear_solve approach where gradients are computed
+    via another linear solve (adjoint solve) rather than by differentiating
+    through the iterative solver.
+
+    Note: Currently only supports tensor inputs (not PyTrees).
+    """
+
+    @staticmethod
+    def forward(ctx, A_matrix, b, solve_fn, transpose_solve_fn, *solve_args):
+        """
+        Forward pass: solve the linear system.
+
+        Args:
+            A_matrix: Coefficient matrix (stored for backward)
+            b: Right-hand side vector
+            solve_fn: Function that solves A @ x = b
+            transpose_solve_fn: Function that solves A^T @ x = b (for adjoint)
+            *solve_args: Additional arguments for solve functions
+
+        Returns:
+            Solution x such that A @ x ≈ b
+        """
+        # Solve the system
+        x, info = solve_fn(A_matrix, b, *solve_args)
+
+        # Save for backward - need A for adjoint solve
+        ctx.save_for_backward(A_matrix, x)
+        ctx.transpose_solve_fn = transpose_solve_fn
+        ctx.solve_args = solve_args
+
+        return x
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        """
+        Backward pass: compute gradients using implicit differentiation.
+
+        For the linear system Ax = b:
+        - ∂L/∂b = A^{-T} @ (∂L/∂x)   (adjoint solve)
+        - ∂L/∂A = -∂L/∂b ⊗ x^T       (outer product, if needed)
+
+        We currently only compute ∂L/∂b since A is typically not learned.
+        """
+        A_matrix, x = ctx.saved_tensors
+        transpose_solve_fn = ctx.transpose_solve_fn
+        solve_args = ctx.solve_args
+
+        grad_b = None
+
+        if ctx.needs_input_grad[1]:  # Need gradient w.r.t. b
+            # Solve the adjoint system: A^T @ grad_b = grad_output
+            # This gives grad_b = A^{-T} @ grad_output
+            A_T = A_matrix.T.conj() if torch.is_complex(A_matrix) else A_matrix.T
+            grad_b, _ = transpose_solve_fn(A_T, grad_output, *solve_args)
+
+        # Return gradients for each input (None for non-tensor inputs)
+        return None, grad_b, None, None, *([None] * len(solve_args))
+
+
+def cg_differentiable(A: torch.Tensor, b: torch.Tensor, x0: Optional[torch.Tensor] = None,
+                      *, tol: float = 1e-5, atol: float = 0.0,
+                      maxiter: Optional[int] = None) -> torch.Tensor:
+    """
+    Differentiable Conjugate Gradient solver with autograd support.
+
+    This function wraps the CG solver to support automatic differentiation
+    through implicit differentiation (adjoint method).
+
+    Args:
+        A: Symmetric positive definite coefficient matrix
+        b: Right-hand side vector (must have requires_grad=True for gradients)
+        x0: Initial guess (optional)
+        tol: Relative tolerance
+        atol: Absolute tolerance
+        maxiter: Maximum iterations
+
+    Returns:
+        Solution x such that A @ x ≈ b
+
+    Note:
+        Gradients are computed via implicit differentiation with another CG solve.
+        They will be accurate only if both solves converge.
+    """
+    if not isinstance(A, torch.Tensor) or A.ndim != 2:
+        raise ValueError("For differentiable CG, A must be a 2D tensor")
+
+    def solve_fn(A_mat, rhs, x_init=None, tol_=1e-5, atol_=0.0, maxiter_=None):
+        return cg(A_mat, rhs, x0=x_init, tol=tol_, atol=atol_, maxiter=maxiter_)
+
+    return LinearSolveFunction.apply(
+        A, b, solve_fn, solve_fn,  # For SPD matrices, transpose_solve = solve
+        x0, tol, atol, maxiter
+    )
+
+
+def bicgstab_differentiable(A: torch.Tensor, b: torch.Tensor, x0: Optional[torch.Tensor] = None,
+                            *, tol: float = 1e-5, atol: float = 0.0,
+                            maxiter: Optional[int] = None) -> torch.Tensor:
+    """
+    Differentiable BiCGStab solver with autograd support.
+
+    This function wraps the BiCGStab solver to support automatic differentiation
+    through implicit differentiation (adjoint method).
+
+    Args:
+        A: General (nonsymmetric) coefficient matrix
+        b: Right-hand side vector (must have requires_grad=True for gradients)
+        x0: Initial guess (optional)
+        tol: Relative tolerance
+        atol: Absolute tolerance
+        maxiter: Maximum iterations
+
+    Returns:
+        Solution x such that A @ x ≈ b
+
+    Note:
+        Gradients are computed via implicit differentiation with another BiCGStab solve.
+        They will be accurate only if both solves converge.
+    """
+    if not isinstance(A, torch.Tensor) or A.ndim != 2:
+        raise ValueError("For differentiable BiCGStab, A must be a 2D tensor")
+
+    def solve_fn(A_mat, rhs, x_init=None, tol_=1e-5, atol_=0.0, maxiter_=None):
+        return bicgstab(A_mat, rhs, x0=x_init, tol=tol_, atol=atol_, maxiter=maxiter_)
+
+    return LinearSolveFunction.apply(
+        A, b, solve_fn, solve_fn,
+        x0, tol, atol, maxiter
+    )
+
+
+def gmres_differentiable(A: torch.Tensor, b: torch.Tensor, x0: Optional[torch.Tensor] = None,
+                         *, tol: float = 1e-5, atol: float = 0.0, restart: int = 20,
+                         maxiter: Optional[int] = None) -> torch.Tensor:
+    """
+    Differentiable GMRES solver with autograd support.
+
+    This function wraps the GMRES solver to support automatic differentiation
+    through implicit differentiation (adjoint method).
+
+    Args:
+        A: General coefficient matrix
+        b: Right-hand side vector (must have requires_grad=True for gradients)
+        x0: Initial guess (optional)
+        tol: Relative tolerance
+        atol: Absolute tolerance
+        restart: Number of iterations before restart
+        maxiter: Maximum number of restarts
+
+    Returns:
+        Solution x such that A @ x ≈ b
+
+    Note:
+        Gradients are computed via implicit differentiation with another GMRES solve.
+        They will be accurate only if both solves converge.
+    """
+    if not isinstance(A, torch.Tensor) or A.ndim != 2:
+        raise ValueError("For differentiable GMRES, A must be a 2D tensor")
+
+    def solve_fn(A_mat, rhs, x_init=None, tol_=1e-5, atol_=0.0, restart_=20, maxiter_=None):
+        return gmres(A_mat, rhs, x0=x_init, tol=tol_, atol=atol_, restart=restart_, maxiter=maxiter_)
+
+    return LinearSolveFunction.apply(
+        A, b, solve_fn, solve_fn,
+        x0, tol, atol, restart, maxiter
+    )
+

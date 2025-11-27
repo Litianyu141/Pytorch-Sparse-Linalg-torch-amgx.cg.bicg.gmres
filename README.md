@@ -93,6 +93,17 @@ x, info = cg(A, b, tol=1e-6, maxiter=1000)
 x, info = bicgstab(A, b, tol=1e-6)
 x, info = gmres(A, b, tol=1e-6, restart=30)
 
+# Module A: Differentiable solvers (with autograd support)
+from pytorch_sparse_solver.module_a import cg_differentiable, bicgstab_differentiable, gmres_differentiable
+
+# These solvers support automatic differentiation via implicit differentiation
+# Gradients are computed by solving the adjoint system, not by differentiating through iterations
+b.requires_grad = True
+x = cg_differentiable(A, b, tol=1e-6)
+loss = x.sum()
+loss.backward()  # Computes gradient via A^{-T} @ grad_output
+print(f"Gradient: {b.grad}")
+
 # Module B: AMGX GPU-accelerated solvers (requires pyamgx)
 from pytorch_sparse_solver.module_b import amgx_cg, amgx_bicgstab, amgx_gmres
 
@@ -377,6 +388,7 @@ Pure PyTorch implementation following JAX's scipy.sparse.linalg API design.
 - Supports function-based linear operators (matrix-free methods)
 - Supports PyTree structured inputs
 - High precision computation (default float64)
+- **Differentiable solvers with autograd support (implicit differentiation)**
 
 **Usage:**
 
@@ -391,6 +403,23 @@ x, info = bicgstab(A, b, tol=1e-6)
 
 # GMRES with restart
 x, info = gmres(A, b, tol=1e-6, restart=30)
+```
+
+**Differentiable Solvers (Autograd Support):**
+
+```python
+from pytorch_sparse_solver.module_a import cg_differentiable, bicgstab_differentiable, gmres_differentiable
+
+# These solvers use implicit differentiation (adjoint method)
+# Forward: solve Ax = b
+# Backward: solve A^T g = grad_output, then grad_b = g
+# No computation graph is stored during iterations - memory efficient!
+
+b = torch.randn(n, requires_grad=True)
+x = cg_differentiable(A, b, tol=1e-6)
+loss = x.sum()
+loss.backward()  # Gradient computed via adjoint solve
+print(f"Gradient w.r.t. b: {b.grad}")
 ```
 
 ### Module B: PyAMGX GPU-accelerated Solvers
@@ -532,6 +561,25 @@ x, info = gmres(A, b, x0=None, tol=1e-5, atol=0.0, restart=20, maxiter=None, M=N
 - `x`: PyTorch tensor - solution vector
 - `info`: int - status (0=success, >0=iterations, <0=error)
 
+### Module A Differentiable Functions
+
+```python
+x = cg_differentiable(A, b, x0=None, tol=1e-5, atol=0.0, maxiter=None)
+x = bicgstab_differentiable(A, b, x0=None, tol=1e-5, atol=0.0, maxiter=None)
+x = gmres_differentiable(A, b, x0=None, tol=1e-5, atol=0.0, restart=20, maxiter=None)
+```
+
+**Parameters:** Same as standard solvers (without preconditioner M)
+
+**Returns:**
+- `x`: PyTorch tensor - solution vector (supports backward pass)
+
+**Gradient Computation:**
+These functions use implicit differentiation (adjoint method):
+- Forward: Solve `Ax = b` to get `x`
+- Backward: Solve `A^T g = grad_output` to get `grad_b = g`
+- Memory efficient: No computation graph stored during iterations
+
 ### Module B Functions
 
 ```python
@@ -583,23 +631,26 @@ Benchmark reports are automatically saved to `Logger/` directory with timestamps
 
 ### Lid-Driven Cavity Flow (LDC) Solver
 
-A complete CFD example is provided in `FVM_example/LDC_by_torchsp/`:
+A complete CFD example using Module A's BiCGStab solver:
 
 ```bash
-# Install visualization dependency (optional, for plotting)
+# Install visualization dependency
 pip install matplotlib
 
-# Basic usage
+# Run with default settings (Re=400, 100x100 grid, 1000 steps)
 python FVM_example/LDC_by_torchsp/ldc_solver.py
 
-# With specific solver
-python FVM_example/LDC_by_torchsp/ldc_solver.py --backend module_a --method cg
+# Customize parameters
+python FVM_example/LDC_by_torchsp/ldc_solver.py --nx 64 --Re 100 --steps 500
 
-# Run benchmark
-python FVM_example/LDC_by_torchsp/ldc_solver.py --benchmark
+# Quick test (32x32 grid, 200 steps)
+python FVM_example/LDC_by_torchsp/ldc_solver.py --quick
+
+# Save to specific directory
+python FVM_example/LDC_by_torchsp/ldc_solver.py --save-dir ./my_results
 ```
 
-See `FVM_example/LDC_by_torchsp/README.md` for detailed documentation.
+Output: Side-by-side plot with velocity magnitude (left) and streamlines (right).
 
 ### Function-Based Linear Operators
 
