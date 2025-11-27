@@ -1,0 +1,132 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pytorch-sparse-solve"
+version = "1.0.0"
+authors = [
+    { name = "Litianyu141", email = "tianyuli_mas@163.com" }
+]
+description = "JAX-style iterative sparse linear solvers for PyTorch (CG, BiCGStab, GMRES)"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+keywords = [
+    "pytorch",
+    "sparse",
+    "linear-algebra",
+    "iterative-solver",
+    "conjugate-gradient",
+    "gmres",
+    "bicgstab",
+    "gpu",
+    "cuda",
+    "scientific-computing",
+]
+
+# Core dependencies - Module A only (pure PyTorch)
+dependencies = [
+    "torch>=2.0.0",
+    "numpy>=1.20.0",
+]
+
+[project.optional-dependencies]
+# Module B - PyAMGX GPU solvers (requires manual AMGX installation)
+amgx = [
+    "scipy>=1.7.0",
+    # Note: pyamgx must be installed separately after compiling AMGX
+]
+
+# Module C - cuDSS direct solver
+# Note: Requires PyTorch compiled from source with USE_CUDSS=1
+cudss = []
+
+# Full installation (all optional deps except system libraries)
+full = [
+    "scipy>=1.7.0",
+]
+
+# Development dependencies
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "isort>=5.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+
+# Documentation
+docs = [
+    "sphinx>=5.0.0",
+    "sphinx-rtd-theme>=1.0.0",
+    "myst-parser>=1.0.0",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/Litianyu141/Pytorch-sparse-solve"
+"Documentation" = "https://github.com/Litianyu141/Pytorch-sparse-solve#readme"
+"Bug Tracker" = "https://github.com/Litianyu141/Pytorch-sparse-solve/issues"
+"Source" = "https://github.com/Litianyu141/Pytorch-sparse-solve"
+
+[project.scripts]
+pytorch-sparse-test = "pytorch_sparse_solver.tests.test_unified:main"
+pytorch-sparse-benchmark = "pytorch_sparse_solver.tests.benchmark:main"
+
+# Use src layout
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["pytorch_sparse_solver*"]
+
+[tool.setuptools.package-data]
+pytorch_sparse_solver = ["py.typed"]
+
+[tool.black]
+line-length = 100
+target-version = ['py39', 'py310', 'py311', 'py312']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+    \.git
+    | \.mypy_cache
+    | \.venv
+    | build
+    | dist
+    | Ref_code
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+skip_glob = ["Ref_code/*"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+exclude = ["Ref_code/"]
+
+[tool.pytest.ini_options]
+testpaths = ["src/pytorch_sparse_solver/tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]

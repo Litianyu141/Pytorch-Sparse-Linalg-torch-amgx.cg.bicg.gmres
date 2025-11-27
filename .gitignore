@@ -1,5 +1,39 @@
+# Python cache
 src/__pycache__/torch_sparse_linalg.cpython-311.pyc
 src/__pycache__/torch_tree_util.cpython-311.pyc
-__pycache__
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build and distribution
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Test results and logs
 FVM_example/torch_results
 FVM_example/scipy_results
+
+# Development directories (local only)
+Ref_code/
+Logger/
+AGENTS/
+src/pytorch_sparse_solve.egg-info
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

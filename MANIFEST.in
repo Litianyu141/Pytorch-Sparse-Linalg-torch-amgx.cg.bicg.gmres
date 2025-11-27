@@ -1,0 +1,23 @@
+# Include documentation
+include README.md
+include LICENSE
+
+# Include source
+recursive-include src/pytorch_sparse_solver *.py
+
+# Include type hints
+include src/pytorch_sparse_solver/py.typed
+
+# Exclude test data and caches
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+recursive-exclude * *.so
+recursive-exclude * .DS_Store
+
+# Exclude development files
+exclude .gitignore
+recursive-exclude .github *
+recursive-exclude Ref_code *
+recursive-exclude FVM_example *
+recursive-exclude Logger *
+recursive-exclude AGENTS *

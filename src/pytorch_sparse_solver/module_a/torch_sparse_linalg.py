@@ -20,7 +20,7 @@ This module provides GMRES solver that matches JAX's API and behavior.
 
 import torch
 import torch.nn.functional as F
-from src.torch_tree_util import (
+from .torch_tree_util import (
     tree_leaves, tree_map, tree_structure, tree_reduce, tree_flatten, tree_unflatten, 
     Partial
 )
@@ -485,8 +485,8 @@ def _gmres_solve(A: Callable, b: Any, x0: Any, atol: torch.Tensor, ptol: torch.T
     return x
 
 
-def _gmres_incremental(A: Callable, b: Any, x0: Any, unit_residual: Any, 
-                      residual_norm: torch.Tensor, ptol: torch.Tensor, 
+def _gmres_incremental(A: Callable, b: Any, x0: Any, unit_residual: Any,
+                      residual_norm: torch.Tensor, ptol: torch.Tensor,
                       restart: int, M: Callable) -> Tuple[Any, Any, torch.Tensor]:
     """
     Implements a single restart of GMRES using incremental QR factorization.
@@ -499,13 +499,17 @@ def _gmres_incremental(A: Callable, b: Any, x0: Any, unit_residual: Any,
 
     # Initialize V with padding for restart vectors
     V = tree_map(
-        lambda x: torch.cat([x.unsqueeze(-1), 
+        lambda x: torch.cat([x.unsqueeze(-1),
                            torch.zeros(x.shape + (restart,), dtype=dtype, device=device)], dim=-1),
         unit_residual,
     )
-    
+
+    # Initialize Hessenberg matrix H with shape (restart+1, restart)
+    H = torch.zeros(restart + 1, restart, dtype=dtype, device=device)
+
+    # Initialize R matrix (upper triangular) with shape (restart, restart)
     # Use eye() to avoid constructing a singular matrix in case of early termination
-    R = torch.eye(restart, restart + 1, dtype=dtype, device=device)
+    R = torch.eye(restart, restart, dtype=dtype, device=device)
 
     givens = torch.zeros((restart, 2), dtype=dtype, device=device)
     beta_vec = torch.zeros((restart + 1), dtype=dtype, device=device)
@@ -513,22 +517,51 @@ def _gmres_incremental(A: Callable, b: Any, x0: Any, unit_residual: Any,
 
     k = 0
     err = residual_norm
-    
+
     # JAX-style while loop simulation
     while k < restart and err > ptol:
-        V, H, breakdown = _kth_arnoldi_iteration(k, A, M, V, R)
-        R_row, givens = _apply_givens_rotations(H[k, :], givens, k)
-        R[k, :] = R_row
-        beta_vec = _rotate_vectors(beta_vec, k, givens[k, 0], givens[k, 1])
+        # Arnoldi iteration updates V and H
+        V, H, breakdown = _kth_arnoldi_iteration(k, A, M, V, H)
+
+        # Extract the k-th column of H (which has k+2 elements: H[0:k+2, k])
+        H_col = H[:k+2, k].clone()
+
+        # Apply previous Givens rotations to the new column
+        for i in range(k):
+            cs, sn = givens[i, 0], givens[i, 1]
+            temp = cs.conj() * H_col[i] - sn.conj() * H_col[i + 1]
+            H_col[i + 1] = sn * H_col[i] + cs * H_col[i + 1]
+            H_col[i] = temp
+
+        # Compute new Givens rotation to eliminate H_col[k+1]
+        cs_new, sn_new = _givens_rotation(H_col[k], H_col[k + 1])
+        givens[k, 0] = cs_new
+        givens[k, 1] = sn_new
+
+        # Apply new rotation
+        H_col[k] = cs_new.conj() * H_col[k] - sn_new.conj() * H_col[k + 1]
+        H_col[k + 1] = torch.tensor(0.0, dtype=dtype, device=device)
+
+        # Store in R (only first k+1 elements needed)
+        R[:k+1, k] = H_col[:k+1]
+
+        # Apply rotation to beta_vec
+        temp = cs_new.conj() * beta_vec[k] - sn_new.conj() * beta_vec[k + 1]
+        beta_vec[k + 1] = sn_new * beta_vec[k] + cs_new * beta_vec[k + 1]
+        beta_vec[k] = temp
+
         err = torch.abs(beta_vec[k + 1])
         k += 1
-        
+
         if breakdown:
             break
 
-    # Solve triangular system
-    y = torch.linalg.solve_triangular(R[:k, :k].T, beta_vec[:k].unsqueeze(-1), upper=False).squeeze(-1)
-    dx = tree_map(lambda X: torch.matmul(X[..., :k], y), V)
+    # Solve triangular system R[:k, :k] @ y = beta_vec[:k]
+    if k > 0:
+        y = torch.linalg.solve_triangular(R[:k, :k], beta_vec[:k].unsqueeze(-1), upper=True).squeeze(-1)
+        dx = tree_map(lambda X: torch.matmul(X[..., :k], y), V)
+    else:
+        dx = tree_map(torch.zeros_like, x0)
 
     x = _add(x0, dx)
     residual = M(_sub(b, A(x)))
