@@ -555,13 +555,16 @@ available = cudss_available()
 
 ```bash
 # Quick benchmark
+python src/run.py --benchmark --quick
+
+# Full benchmark
+python src/run.py --benchmark
+
+# Custom benchmark with specific sizes
+python src/run.py --benchmark --sizes 100,500,1000 --runs 5
+
+# Or use the module directly
 python -m pytorch_sparse_solver.tests.benchmark --quick
-
-# Full benchmark with custom sizes
-python -m pytorch_sparse_solver.tests.benchmark --sizes 100,500,1000
-
-# Specify backends and methods
-python -m pytorch_sparse_solver.tests.benchmark --backends module_a,module_c --methods cg,direct
 ```
 
 Benchmark reports are automatically saved to `Logger/` directory with timestamps.
@@ -642,7 +645,20 @@ print("Gradient:", b.grad)
 ### Run Complete Test Suite
 
 ```bash
-python src/run_all_tests.py
+# Run correctness tests
+python src/run.py --test
+
+# Run performance benchmarks
+python src/run.py --benchmark
+
+# Run both tests and benchmarks
+python src/run.py --all
+
+# Quick benchmark (smaller matrices, fewer runs)
+python src/run.py --benchmark --quick
+
+# Custom benchmark settings
+python src/run.py --benchmark --sizes 100,500,1000 --runs 5
 ```
 
 ### Run Individual Module Tests
