@@ -1,6 +1,5 @@
 # PyTorch Sparse Solver
 
-[![CI](https://github.com/Litianyu141/Pytorch-sparse-solve/actions/workflows/ci.yml/badge.svg)](https://github.com/Litianyu141/Pytorch-sparse-solve/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch 2.7+](https://img.shields.io/badge/pytorch-2.7+-ee4c2c.svg)](https://pytorch.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
@@ -139,7 +138,7 @@ pip install git+https://github.com/Litianyu141/Pytorch-Sparse-Linalg-torch-amgx.
 ```bash
 # Clone the repository
 git clone https://github.com/Litianyu141/Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres.git
-cd Pytorch-sparse-solve
+cd Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres
 
 # Install in editable mode
 pip install -e .
@@ -584,6 +583,9 @@ Benchmark reports are automatically saved to `Logger/` directory with timestamps
 A complete CFD example is provided in `FVM_example/LDC_by_torchsp/`:
 
 ```bash
+# Install visualization dependency (optional, for plotting)
+pip install matplotlib
+
 # Basic usage
 python FVM_example/LDC_by_torchsp/ldc_solver.py
 
@@ -640,23 +642,23 @@ print("Gradient:", b.grad)
 ### Run Complete Test Suite
 
 ```bash
-python run_all_tests.py
+python src/run_all_tests.py
 ```
 
 ### Run Individual Module Tests
 
 ```bash
 # Module A tests
-python -m pytest src/pytorch_sparse_solver/tests/test_module_a.py -v
+python src/pytorch_sparse_solver/tests/test_module_a.py
 
-# Module B tests
-python -m pytest src/pytorch_sparse_solver/tests/test_module_b.py -v
+# Module B tests (requires pyamgx)
+python src/pytorch_sparse_solver/tests/test_module_b.py
 
-# Module C tests
-python -m pytest src/pytorch_sparse_solver/tests/test_module_c.py -v
+# Module C tests (requires cuDSS)
+python src/pytorch_sparse_solver/tests/test_module_c.py
 
 # Unified interface tests
-python -m pytest src/pytorch_sparse_solver/tests/test_unified.py -v
+python src/pytorch_sparse_solver/tests/test_unified.py
 ```
 
 ---
