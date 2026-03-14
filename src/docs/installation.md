@@ -27,7 +27,7 @@ conda activate pytorch_sparse
 python -m pip install "torch>=2.0.0"
 
 # Install the package
-pip install "git+https://github.com/Litianyu141/Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-.git"
+pip install "git+https://github.com/Litianyu141/Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres.git"
 ```
 
 ### Method 2: Direct Usage
@@ -35,7 +35,7 @@ pip install "git+https://github.com/Litianyu141/Pytorch_Sparse_Linalg-torch.cg-b
 ```python
 # No installation needed, just add the repo's src/ directory to Python path
 import sys
-sys.path.insert(0, '/path/to/Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-/src')
+sys.path.insert(0, '/path/to/Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres/src')
 
 from pytorch_sparse_solver import solve
 ```
@@ -202,7 +202,7 @@ To install all modules, follow this order:
 
 ```bash
 # In the configured environment
-cd /path/to/Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-
+cd /path/to/Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres
 pip install -e .
 ```
 
@@ -213,7 +213,7 @@ pip install -e .
 Run the following command to verify all modules are correctly installed:
 
 ```bash
-cd /path/to/Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-
+cd /path/to/Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres
 python -c "
 from pytorch_sparse_solver.utils.availability import print_availability_report
 print_availability_report()

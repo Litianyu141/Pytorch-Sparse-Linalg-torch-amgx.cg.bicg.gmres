@@ -141,10 +141,10 @@ print_availability_report()
 ```bash
 # Install the core package directly from GitHub.
 # This guarantees Module A and the unified interface fallback.
-pip install "git+https://github.com/Litianyu141/Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-.git"
+pip install "git+https://github.com/Litianyu141/Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres.git"
 
 # Or with specific branch/tag
-pip install "git+https://github.com/Litianyu141/Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-.git@main"
+pip install "git+https://github.com/Litianyu141/Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres.git@main"
 ```
 
 Optional CUDA backends are not included by `pip` alone:
@@ -156,8 +156,8 @@ Optional CUDA backends are not included by `pip` alone:
 
 ```bash
 # Clone the repository
-git clone https://github.com/Litianyu141/Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-.git
-cd Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-
+git clone https://github.com/Litianyu141/Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres.git
+cd Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres
 
 # Install in editable mode
 pip install -e .
@@ -179,7 +179,7 @@ conda activate pytorch_sparse
 python -m pip install "torch>=2.0.0"
 
 # Install the package from GitHub
-pip install "git+https://github.com/Litianyu141/Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-.git"
+pip install "git+https://github.com/Litianyu141/Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres.git"
 ```
 
 ### Module B Installation (PyAMGX)
@@ -338,7 +338,7 @@ To install all modules, follow this order:
 
 ```bash
 # In the configured environment
-cd /path/to/Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-
+cd /path/to/Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres
 pip install -e .
 ```
 
@@ -792,7 +792,7 @@ A: Try:
 
 | Combination | Installation | Available Features |
 |-------------|--------------|-------------------|
-| A only | `pip install "git+https://github.com/Litianyu141/Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-.git"` | CG, BiCGStab, GMRES (CPU/GPU) |
+| A only | `pip install "git+https://github.com/Litianyu141/Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres.git"` | CG, BiCGStab, GMRES (CPU/GPU) |
 | A+B | Install pyamgx | Above + AMGX acceleration |
 | A+C | Compile PyTorch with cuDSS | Above + Direct method |
 | A+B+C | Full installation | All features |

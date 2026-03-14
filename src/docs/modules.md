@@ -293,7 +293,7 @@ print_availability_report()
 
 | Combination | Installation | Available Features |
 |-------------|--------------|-------------------|
-| A only | `pip install "git+https://github.com/Litianyu141/Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-.git"` | CG, BiCGStab, GMRES (CPU/GPU) |
+| A only | `pip install "git+https://github.com/Litianyu141/Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres.git"` | CG, BiCGStab, GMRES (CPU/GPU) |
 | A+B | Install pyamgx | Above + AMGX acceleration |
 | A+C | Compile PyTorch with cuDSS | Above + Direct method |
 | A+B+C | Full installation | All features |

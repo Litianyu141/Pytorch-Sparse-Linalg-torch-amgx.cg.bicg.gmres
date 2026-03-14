@@ -79,10 +79,10 @@ docs = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/Litianyu141/Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-"
-"Documentation" = "https://github.com/Litianyu141/Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-#readme"
-"Bug Tracker" = "https://github.com/Litianyu141/Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-/issues"
-"Source" = "https://github.com/Litianyu141/Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-"
+"Homepage" = "https://github.com/Litianyu141/Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres"
+"Documentation" = "https://github.com/Litianyu141/Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres#readme"
+"Bug Tracker" = "https://github.com/Litianyu141/Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres/issues"
+"Source" = "https://github.com/Litianyu141/Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres"
 
 [project.scripts]
 pytorch-sparse-test = "pytorch_sparse_solver.tests.test_unified:main"
