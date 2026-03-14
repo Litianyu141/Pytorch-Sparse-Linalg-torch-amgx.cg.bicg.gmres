@@ -19,7 +19,7 @@ Unified Sparse Linear System Solver Interface
 This module provides a unified interface for solving sparse linear systems Ax = b
 using various backends:
 - Module A: JAX-style iterative solvers (CG, BiCGStab, GMRES) - pure PyTorch
-- Module B: PyAMGX GPU-accelerated solvers with AMG preconditioner
+- Module B: PyAMGX GPU-accelerated Krylov solvers plus a direct AMGX AMG entry point
 - Module C: cuDSS direct solver via torch.sparse.spsolve
 
 The interface automatically detects which backends are available and provides
@@ -58,6 +58,7 @@ class SolverMethod(Enum):
     CG = "cg"
     BICGSTAB = "bicgstab"
     GMRES = "gmres"
+    AMG = "amg"
     DIRECT = "direct"  # Only available with Module C
 
 
@@ -167,11 +168,12 @@ class SparseSolver:
         """Lazy load Module B."""
         if self._module_b is None:
             try:
-                from .module_b import amgx_cg, amgx_bicgstab, amgx_gmres
+                from .module_b import amgx_amg, amgx_bicgstab, amgx_cg, amgx_gmres
                 self._module_b = {
                     'cg': amgx_cg,
                     'bicgstab': amgx_bicgstab,
                     'gmres': amgx_gmres,
+                    'amg': amgx_amg,
                 }
             except ImportError as e:
                 raise RuntimeError(f"Failed to load Module B: {e}")
@@ -234,6 +236,11 @@ class SparseSolver:
                     "Direct solver requires Module C (cuDSS), which is not available. "
                     "Use an iterative method (cg, bicgstab, gmres) instead."
                 )
+
+        if method == "amg":
+            if "module_b" in available:
+                return "module_b", "amg"
+            raise ValueError("AMG solver requires Module B (AMGX), which is not available.")
 
         # For iterative methods, prefer Module B (GPU) if available and matrix is on GPU
         if A.is_cuda and "module_b" in available:
@@ -472,6 +479,15 @@ class SparseSolver:
         """Shortcut for GMRES solver."""
         return self.solve(A, b, method='gmres', **kwargs)
 
+    def amg(
+        self,
+        A: torch.Tensor,
+        b: torch.Tensor,
+        **kwargs
+    ) -> Tuple[torch.Tensor, SolverResult]:
+        """Shortcut for the AMGX AMG solver."""
+        return self.solve(A, b, method='amg', backend='module_b', **kwargs)
+
     def direct(
         self,
         A: torch.Tensor,
@@ -548,6 +564,11 @@ def bicgstab(A, b, **kwargs):
 def gmres(A, b, **kwargs):
     """Solve Ax = b using GMRES."""
     return solve(A, b, method='gmres', **kwargs)
+
+
+def amg(A, b, **kwargs):
+    """Solve Ax = b using AMGX AMG."""
+    return solve(A, b, method='amg', backend='module_b', **kwargs)
 
 
 def direct_solve(A, b, **kwargs):

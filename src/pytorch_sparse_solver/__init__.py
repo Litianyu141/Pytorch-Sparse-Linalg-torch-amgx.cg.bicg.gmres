@@ -4,7 +4,7 @@ PyTorch Sparse Solver - A Modular Sparse Linear System Solver Library
 This package provides multiple backends for solving sparse linear systems Ax = b:
 
 - **Module A**: JAX-style iterative solvers (CG, BiCGStab, GMRES) - pure PyTorch
-- **Module B**: PyAMGX GPU-accelerated solvers with AMG preconditioner
+- **Module B**: PyAMGX GPU-accelerated solvers plus a direct AMGX AMG entry point
 - **Module C**: cuDSS direct solver via torch.sparse.spsolve
 
 Each module can be installed independently, making this library flexible for
@@ -53,6 +53,7 @@ from .solver import (
     cg,
     bicgstab,
     gmres,
+    amg,
     direct_solve,
 )
 
@@ -91,6 +92,7 @@ __all__ = [
     'cg',
     'bicgstab',
     'gmres',
+    'amg',
     'direct_solve',
 
     # Availability checking

@@ -770,7 +770,18 @@ def gmres(A: Union[torch.Tensor, Callable[[Any], Any]], b: Any, x0: Optional[Any
     failed = torch.isnan(_norm(x)) or final_residual > convergence_threshold
     info = torch.where(failed, torch.tensor(-1), torch.tensor(0))
     
-    return x, info.item()
+    info = info.item()
+
+    if _use_implicit_diff(A, b):
+        def transpose_solve_fn(A_mat, rhs, x_init=None, tol_=1e-5, atol_=0.0, restart_=20, maxiter_=None):
+            return gmres(
+                A_mat, rhs, x0=x_init, tol=tol_, atol=atol_,
+                restart=restart_, maxiter=maxiter_, M=M, solve_method=solve_method
+            )
+
+        x = ImplicitAdjointFunction.apply(A, b, x, transpose_solve_fn, x0, tol, atol, restart, maxiter)
+
+    return x, info
 
 
 @jit_compile
@@ -1060,8 +1071,21 @@ def cg(A: Union[torch.Tensor, Callable[[Any], Any]], b: Any, x0: Optional[Any] =
     bicgstab : Bi-Conjugate Gradient Stable iteration
     gmres : Generalized Minimal Residual iteration
     """
-    return _isolve(_cg_solve, A=A, b=b, x0=x0, tol=tol, atol=atol,
-                   maxiter=maxiter, M=M, check_symmetric=True)
+    x, info = _isolve(
+        _cg_solve, A=A, b=b, x0=x0, tol=tol, atol=atol,
+        maxiter=maxiter, M=M, check_symmetric=True
+    )
+
+    if _use_implicit_diff(A, b):
+        def transpose_solve_fn(A_mat, rhs, x_init=None, tol_=1e-5, atol_=0.0, maxiter_=None):
+            return _isolve(
+                _cg_solve, A=A_mat, b=rhs, x0=x_init, tol=tol_, atol=atol_,
+                maxiter=maxiter_, M=M, check_symmetric=True
+            )
+
+        x = ImplicitAdjointFunction.apply(A, b, x, transpose_solve_fn, x0, tol, atol, maxiter)
+
+    return x, info
 
 
 def bicgstab(A: Union[torch.Tensor, Callable[[Any], Any]], b: Any, x0: Optional[Any] = None,
@@ -1113,8 +1137,21 @@ def bicgstab(A: Union[torch.Tensor, Callable[[Any], Any]], b: Any, x0: Optional[
     gmres
     cg
     """
-    return _isolve(_bicgstab_solve, A=A, b=b, x0=x0, tol=tol, atol=atol,
-                   maxiter=maxiter, M=M)
+    x, info = _isolve(
+        _bicgstab_solve, A=A, b=b, x0=x0, tol=tol, atol=atol,
+        maxiter=maxiter, M=M
+    )
+
+    if _use_implicit_diff(A, b):
+        def transpose_solve_fn(A_mat, rhs, x_init=None, tol_=1e-5, atol_=0.0, maxiter_=None):
+            return _isolve(
+                _bicgstab_solve, A=A_mat, b=rhs, x0=x_init, tol=tol_, atol=atol_,
+                maxiter=maxiter_, M=M
+            )
+
+        x = ImplicitAdjointFunction.apply(A, b, x, transpose_solve_fn, x0, tol, atol, maxiter)
+
+    return x, info
 
 
 # =============================================================================
@@ -1185,6 +1222,40 @@ class LinearSolveFunction(torch.autograd.Function):
 
         # Return gradients for each input (None for non-tensor inputs)
         return None, grad_b, None, None, *([None] * len(solve_args))
+
+
+class ImplicitAdjointFunction(torch.autograd.Function):
+    """Attach implicit-differentiation backward logic to a precomputed solution tensor."""
+
+    @staticmethod
+    def forward(ctx, A_matrix, b, x, transpose_solve_fn, *solve_args):
+        ctx.save_for_backward(A_matrix, x)
+        ctx.transpose_solve_fn = transpose_solve_fn
+        ctx.solve_args = solve_args
+        return x
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        A_matrix, x = ctx.saved_tensors
+        transpose_solve_fn = ctx.transpose_solve_fn
+        solve_args = ctx.solve_args
+
+        grad_b = None
+        if ctx.needs_input_grad[1]:
+            A_T = A_matrix.T.conj() if torch.is_complex(A_matrix) else A_matrix.T
+            grad_b, _ = transpose_solve_fn(A_T, grad_output, *solve_args)
+
+        return None, grad_b, None, None, *([None] * len(solve_args))
+
+
+def _use_implicit_diff(A: Any, b: Any) -> bool:
+    """Enable implicit-diff wrapping only for plain 2D tensor systems."""
+    return (
+        isinstance(A, torch.Tensor)
+        and isinstance(b, torch.Tensor)
+        and A.ndim == 2
+        and (A.requires_grad or b.requires_grad)
+    )
 
 
 def cg_differentiable(A: torch.Tensor, b: torch.Tensor, x0: Optional[torch.Tensor] = None,
@@ -1294,4 +1365,3 @@ def gmres_differentiable(A: torch.Tensor, b: torch.Tensor, x0: Optional[torch.Te
         A, b, solve_fn, solve_fn,
         x0, tol, atol, restart, maxiter
     )
-

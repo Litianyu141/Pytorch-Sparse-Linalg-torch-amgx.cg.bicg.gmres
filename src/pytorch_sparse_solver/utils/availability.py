@@ -150,9 +150,8 @@ def print_availability_report() -> None:
     module_b = check_module_b_available()
     status_b = "✅ Available" if module_b else "❌ Not Available"
     print(f"\nModule B (PyAMGX GPU Solver): {status_b}")
-    print("  - AMGX CG with AMG preconditioner")
-    print("  - AMGX BiCGStab with AMG preconditioner")
-    print("  - AMGX GMRES with AMG preconditioner")
+    print("  - AMGX CG / BiCGStab / GMRES")
+    print("  - AMGX AMG")
     print("  - Automatic differentiation support")
     if not module_b:
         print("  ⚠️  Requires: NVIDIA GPU + CUDA + pyamgx library")

@@ -14,7 +14,7 @@ Features:
 - GPU acceleration via PyTorch's CUDA support
 - Support for function-based linear operators (matrix-free methods)
 - High precision computation (float64 by default)
-- Differentiable solvers with autograd support (implicit differentiation)
+- Standard solver APIs can attach implicit-diff backward logic automatically
 
 Example:
     >>> import torch
@@ -30,10 +30,9 @@ Example:
     >>> x, info = cg(A, b, tol=1e-6)
     >>> print(f"Converged: {info == 0}")
 
-    >>> # Differentiable solve (for gradient computation)
-    >>> from pytorch_sparse_solver.module_a import cg_differentiable
+    >>> # Autograd-aware solve (for gradient computation)
     >>> b.requires_grad = True
-    >>> x = cg_differentiable(A, b, tol=1e-6)
+    >>> x, info = cg(A, b, tol=1e-6)
     >>> loss = x.sum()
     >>> loss.backward()  # Computes gradient via implicit differentiation
 """

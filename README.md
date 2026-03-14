@@ -1,13 +1,13 @@
 # PyTorch Sparse Solver
 
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![PyTorch 2.7+](https://img.shields.io/badge/pytorch-2.7+-ee4c2c.svg)](https://pytorch.org/)
+[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 A modular, high-performance sparse linear system solver library for PyTorch with GPU acceleration and automatic differentiation support.
 
 ## Latest Updates
 
-> **Update 2025.11.27**: Major refactoring into modular architecture (Module A/B/C/D) with unified interface and comprehensive benchmark suite.
+> **Update 2025.11.27**: Major refactoring into modular architecture (Module A/B/C plus unified interface) with comprehensive benchmark suite.
 >
 > **Update 2025.06.25**: Added PyAMGX support with improved differentiability.
 
@@ -25,16 +25,16 @@ A modular, high-performance sparse linear system solver library for PyTorch with
 | Module | Description | Dependencies |
 |--------|-------------|--------------|
 | **Module A** | JAX-style iterative solvers (CG, BiCGStab, GMRES) | PyTorch only |
-| **Module B** | Differentionable NVIDIA AMGX GPU-accelerated solvers | PyTorch + AMGX + pyamgx |
+| **Module B** | Differentiable NVIDIA AMGX GPU-accelerated solvers | PyTorch + AMGX + pyamgx |
 | **Module C** | cuDSS direct solver (LU factorization) | PyTorch 2.7+ with cuDSS |
-| **Module D** | Unified interface for all backends | Any combination above |
+| **Unified Interface** | `SparseSolver` / `solve` routing across backends | Any combination above |
 
 ### Package Structure
 
 ```
 pytorch_sparse_solver/
 ├── __init__.py              # Main entry point
-├── solver.py                # Unified solver class (Module D)
+├── solver.py                # Unified solver class
 ├── module_a/                # JAX-style iterative solvers
 │   ├── __init__.py
 │   ├── torch_sparse_linalg.py   # CG, BiCGStab, GMRES
@@ -64,7 +64,7 @@ pytorch_sparse_solver/
 ### Using the Unified Interface (Recommended)
 
 ```python
-from pytorch_sparse_solver import SparseSolver, solve
+from pytorch_sparse_solver import SparseSolver, solve, check_module_c_available
 
 # Create solver instance
 solver = SparseSolver()
@@ -73,17 +73,22 @@ solver = SparseSolver()
 x, result = solver.solve(A, b, method='cg')
 print(f"Backend: {result.backend}, Residual: {result.residual}")
 
-# Or use the convenience function
+# Or use the convenience function with automatic backend selection
 x, result = solve(A, b, method='cg', backend='auto')
 
-# Specify backend explicitly
+# Specify a backend explicitly
 x, result = solve(A, b, method='cg', backend='module_a')
-x, result = solve(A, b, method='direct', backend='module_c')
+
+# Optional CUDA backends should be gated by availability
+if check_module_c_available():
+    x, result = solve(A, b, method='direct', backend='module_c')
 ```
 
 ### Using Individual Modules
 
 ```python
+from pytorch_sparse_solver import check_module_b_available, check_module_c_available
+
 # Module A: Pure PyTorch iterative solvers
 from pytorch_sparse_solver.module_a import cg, bicgstab, gmres
 
@@ -91,13 +96,10 @@ x, info = cg(A, b, tol=1e-6, maxiter=1000)
 x, info = bicgstab(A, b, tol=1e-6)
 x, info = gmres(A, b, tol=1e-6, restart=30)
 
-# Module A: Differentiable solvers (with autograd support)
-from pytorch_sparse_solver.module_a import cg_differentiable, bicgstab_differentiable, gmres_differentiable
-
-# These solvers support automatic differentiation via implicit differentiation
-# Gradients are computed by solving the adjoint system, not by differentiating through iterations
+# Module A: Standard APIs auto-attach implicit-diff backward logic for 2D tensor systems
+# when A or b requires gradients. Legacy *_differentiable wrappers still exist for compatibility.
 b.requires_grad = True
-x = cg_differentiable(A, b, tol=1e-6)
+x, info = cg(A, b, tol=1e-6)
 loss = x.sum()
 loss.backward()  # Computes gradient via A^{-T} @ grad_output
 print(f"Gradient: {b.grad}")
@@ -105,13 +107,15 @@ print(f"Gradient: {b.grad}")
 # Module B: AMGX GPU-accelerated solvers (requires pyamgx)
 from pytorch_sparse_solver.module_b import amgx_cg, amgx_bicgstab, amgx_gmres
 
-x = amgx_cg(A, b, tol=1e-8, maxiter=1000)
+if check_module_b_available():
+    x = amgx_cg(A, b, tol=1e-8, maxiter=1000)
 
 # Module C: cuDSS direct solver (requires PyTorch with cuDSS)
 from pytorch_sparse_solver.module_c import cudss_spsolve
 
-A_csr = A.to_sparse_csr()
-x = cudss_spsolve(A_csr, b)
+if check_module_c_available():
+    A_csr = A.to_sparse_csr()
+    x = cudss_spsolve(A_csr, b)
 ```
 
 ### Check Module Availability
@@ -135,19 +139,25 @@ print_availability_report()
 ### Quick Install from GitHub
 
 ```bash
-# Install directly from GitHub (recommended)
-pip install git+https://github.com/Litianyu141/Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres.git
+# Install the core package directly from GitHub.
+# This guarantees Module A and the unified interface fallback.
+pip install "git+https://github.com/Litianyu141/Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-.git"
 
 # Or with specific branch/tag
-pip install git+https://github.com/Litianyu141/Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres.git@main
+pip install "git+https://github.com/Litianyu141/Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-.git@main"
 ```
+
+Optional CUDA backends are not included by `pip` alone:
+
+- Module B additionally requires NVIDIA AMGX and `pyamgx`
+- Module C additionally requires a cuDSS-enabled PyTorch build
 
 ### Local Development Install
 
 ```bash
 # Clone the repository
-git clone https://github.com/Litianyu141/Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres.git
-cd Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres
+git clone https://github.com/Litianyu141/Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-.git
+cd Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-
 
 # Install in editable mode
 pip install -e .
@@ -166,10 +176,10 @@ conda create -n pytorch_sparse python=3.11 -y
 conda activate pytorch_sparse
 
 # Install PyTorch
-pip install torch>=2.0.0
+python -m pip install "torch>=2.0.0"
 
 # Install the package from GitHub
-pip install git+https://github.com/Litianyu141/Pytorch-Sparse-Linalg-torch-amgx.cg.bicg.gmres.git
+pip install "git+https://github.com/Litianyu141/Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-.git"
 ```
 
 ### Module B Installation (PyAMGX)
@@ -354,9 +364,8 @@ Module A (JAX-style Iterative Solvers): Available
   - GMRES (Generalized Minimal Residual)
 
 Module B (PyAMGX GPU Solver): Available
-  - AMGX CG with AMG preconditioner
-  - AMGX BiCGStab with AMG preconditioner
-  - AMGX GMRES with AMG preconditioner
+  - AMGX CG / BiCGStab / GMRES
+  - AMGX AMG
   - Automatic differentiation support
 
 Module C (cuDSS Direct Solver): Available
@@ -403,18 +412,18 @@ x, info = bicgstab(A, b, tol=1e-6)
 x, info = gmres(A, b, tol=1e-6, restart=30)
 ```
 
-**Differentiable Solvers (Autograd Support):**
+**Autograd Support:**
 
 ```python
-from pytorch_sparse_solver.module_a import cg_differentiable, bicgstab_differentiable, gmres_differentiable
+from pytorch_sparse_solver.module_a import cg
 
-# These solvers use implicit differentiation (adjoint method)
+# Standard solver APIs use implicit differentiation automatically for plain 2D tensor systems
 # Forward: solve Ax = b
 # Backward: solve A^T g = grad_output, then grad_b = g
 # No computation graph is stored during iterations - memory efficient!
 
 b = torch.randn(n, requires_grad=True)
-x = cg_differentiable(A, b, tol=1e-6)
+x, info = cg(A, b, tol=1e-6)
 loss = x.sum()
 loss.backward()  # Gradient computed via adjoint solve
 print(f"Gradient w.r.t. b: {b.grad}")
@@ -428,7 +437,7 @@ Wraps NVIDIA's AMGX library via pyamgx Python bindings.
 - **AMGX CG**: GPU-accelerated conjugate gradient
 - **AMGX BiCGStab**: GPU-accelerated BiCGStab
 - **AMGX GMRES**: GPU-accelerated GMRES
-- **AMG Preconditioner**: Algebraic multigrid preconditioning
+- **AMGX AMG**: Direct algebraic multigrid solve
 
 **Features:**
 - GPU acceleration, suitable for large-scale problems
@@ -473,7 +482,7 @@ if cudss_available():
     x = cudss_spsolve(A_csr, b)
 ```
 
-### Module D: Unified Interface
+### Unified Interface
 
 Provides the unified `SparseSolver` class that integrates all backends.
 
@@ -527,7 +536,7 @@ x, result = solve(A, b, method='cg', backend='auto', tol=1e-8, maxiter=1000)
 **Parameters:**
 - `A`: PyTorch tensor or callable - coefficient matrix or matvec function
 - `b`: PyTorch tensor - right-hand side vector
-- `method`: str - 'cg', 'bicgstab', 'gmres', or 'direct'
+- `method`: str - 'cg', 'bicgstab', 'gmres', 'amg', or 'direct'
 - `backend`: str - 'auto', 'module_a', 'module_b', or 'module_c'
 - `tol`: float - convergence tolerance (default: 1e-8)
 - `maxiter`: int - maximum iterations (default: 1000)
@@ -559,7 +568,7 @@ x, info = gmres(A, b, x0=None, tol=1e-5, atol=0.0, restart=20, maxiter=None, M=N
 - `x`: PyTorch tensor - solution vector
 - `info`: int - status (0=success, >0=iterations, <0=error)
 
-### Module A Differentiable Functions
+### Legacy Module A Differentiable Functions
 
 ```python
 x = cg_differentiable(A, b, x0=None, tol=1e-5, atol=0.0, maxiter=None)
@@ -567,7 +576,7 @@ x = bicgstab_differentiable(A, b, x0=None, tol=1e-5, atol=0.0, maxiter=None)
 x = gmres_differentiable(A, b, x0=None, tol=1e-5, atol=0.0, restart=20, maxiter=None)
 ```
 
-**Parameters:** Same as standard solvers (without preconditioner M)
+**Parameters:** Same as standard solvers (without preconditioner `M`)
 
 **Returns:**
 - `x`: PyTorch tensor - solution vector (supports backward pass)
@@ -584,6 +593,7 @@ These functions use implicit differentiation (adjoint method):
 x = amgx_cg(A, b, tol=1e-8, maxiter=1000)
 x = amgx_bicgstab(A, b, tol=1e-8, maxiter=1000)
 x = amgx_gmres(A, b, tol=1e-8, maxiter=1000)
+x = amgx_amg(A, b, tol=1e-8, maxiter=1000)
 ```
 
 ### Module C Functions
@@ -694,6 +704,9 @@ print("Gradient:", b.grad)
 ### Run Complete Test Suite
 
 ```bash
+# Run the pytest suite
+pytest
+
 # Run correctness tests
 python src/run.py --test
 
@@ -779,7 +792,7 @@ A: Try:
 
 | Combination | Installation | Available Features |
 |-------------|--------------|-------------------|
-| A only | `pip install pytorch_sparse_solver` | CG, BiCGStab, GMRES (CPU/GPU) |
+| A only | `pip install "git+https://github.com/Litianyu141/Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-.git"` | CG, BiCGStab, GMRES (CPU/GPU) |
 | A+B | Install pyamgx | Above + AMGX acceleration |
 | A+C | Compile PyTorch with cuDSS | Above + Direct method |
 | A+B+C | Full installation | All features |

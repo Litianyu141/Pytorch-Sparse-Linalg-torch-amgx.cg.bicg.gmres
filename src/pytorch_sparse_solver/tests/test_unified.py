@@ -28,16 +28,19 @@ Tests include:
 
 import sys
 import time
+from pathlib import Path
+
 import torch
 import numpy as np
 from typing import Tuple, Optional, List
 
 # Add parent path for direct execution
-sys.path.insert(0, str(__file__).rsplit('/', 3)[0])
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 
 class TestUnifiedInterface:
     """Test class for unified SparseSolver interface."""
+    __test__ = False
 
     def __init__(self, verbose: bool = True):
         self.verbose = verbose
@@ -407,3 +410,8 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+def test_unified_interface_suite() -> None:
+    """Pytest entry point for the unified interface script-style test suite."""
+    assert TestUnifiedInterface(verbose=False).run_all_tests()

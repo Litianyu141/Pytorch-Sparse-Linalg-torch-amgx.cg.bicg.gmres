@@ -26,12 +26,14 @@ Run this script to verify Module B works independently.
 
 import sys
 import time
+from pathlib import Path
+
 import torch
 import numpy as np
 from typing import Tuple, Optional
 
 # Add parent path for direct execution
-sys.path.insert(0, str(__file__).rsplit('/', 3)[0])
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 
 def compute_residual(A: torch.Tensor, x: torch.Tensor, b: torch.Tensor) -> float:
@@ -45,6 +47,7 @@ def compute_residual(A: torch.Tensor, x: torch.Tensor, b: torch.Tensor) -> float
 
 class TestModuleB:
     """Test class for Module B (PyAMGX) solvers."""
+    __test__ = False
 
     def __init__(self, verbose: bool = True):
         self.verbose = verbose
@@ -330,3 +333,8 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+def test_module_b_suite() -> None:
+    """Pytest entry point for the Module B script-style test suite."""
+    assert TestModuleB(verbose=False).run_all_tests()

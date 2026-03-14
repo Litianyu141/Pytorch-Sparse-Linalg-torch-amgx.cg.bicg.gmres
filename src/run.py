@@ -134,6 +134,18 @@ def run_all_tests(verbose: bool = True) -> bool:
         print(f"Unified interface tests failed with exception: {e}")
         results['Unified Interface'] = False
 
+    # GPU integration validation
+    print("\n" + "=" * 70)
+    print("Running GPU Integration Validation...")
+    print("=" * 70)
+    try:
+        from pytorch_sparse_solver.tests.test_gpu_validation import GPUValidationRunner
+        tester = GPUValidationRunner(verbose=verbose)
+        results['GPU Validation'] = tester.run_all()
+    except Exception as e:
+        print(f"GPU validation failed with exception: {e}")
+        results['GPU Validation'] = False
+
     # Print summary
     print("\n" + "=" * 70)
     print("Complete Test Suite Summary")
@@ -165,7 +177,7 @@ def run_benchmarks(quick: bool = False, sizes: list = None, num_runs: int = 3) -
 
     Benchmarks:
     - Module A: CG, BiCGStab, GMRES
-    - Module B: CG, BiCGStab (GMRES has AMG config issues)
+    - Module B: CG, BiCGStab, GMRES, AMG
     - Module C: Direct (cuDSS)
 
     Args:
@@ -196,13 +208,13 @@ def run_benchmarks(quick: bool = False, sizes: list = None, num_runs: int = 3) -
             print("=" * 80)
             print("Testing Strategy:")
             print("  - Module A: CG, BiCGStab, GMRES")
-            print("  - Module B: CG, BiCGStab (GMRES has AMG config issues)")
+            print("  - Module B: CG, BiCGStab, GMRES, AMG")
             print("  - Module C: Direct (cuDSS)")
             print("=" * 80)
 
             test_configs = [
                 ('module_a', ['cg', 'bicgstab', 'gmres']),
-                ('module_b', ['cg', 'bicgstab']),
+                ('module_b', ['cg', 'bicgstab', 'gmres', 'amg']),
                 ('module_c', ['direct']),
             ]
 

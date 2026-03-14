@@ -26,12 +26,14 @@ Run this script to verify Module A works independently.
 
 import sys
 import time
+from pathlib import Path
+
 import torch
 import numpy as np
 from typing import Tuple, Optional
 
 # Add parent path for direct execution
-sys.path.insert(0, str(__file__).rsplit('/', 3)[0])
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 
 def create_spd_matrix(n: int, device: str = 'cpu', dtype=torch.float64) -> torch.Tensor:
@@ -59,6 +61,7 @@ def compute_residual(A: torch.Tensor, x: torch.Tensor, b: torch.Tensor) -> float
 
 class TestModuleA:
     """Test class for Module A solvers."""
+    __test__ = False
 
     def __init__(self, verbose: bool = True):
         self.verbose = verbose
@@ -367,3 +370,8 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+def test_module_a_suite() -> None:
+    """Pytest entry point for the Module A script-style test suite."""
+    assert TestModuleA(verbose=False).run_all_tests()

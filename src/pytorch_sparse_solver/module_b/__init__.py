@@ -7,8 +7,8 @@ AMGX library with full automatic differentiation support through PyTorch's autog
 Key Features:
 - Forward pass: Uses pyamgx for high-performance GPU solving
 - Backward pass: Custom gradient computation using implicit function theorem
-- Multiple solvers: CG, BiCGStab, GMRES with AMG preconditioner
-- Automatic configuration: Optimized settings for different matrix types
+- Multiple solvers: CG, BiCGStab, GMRES, and direct AMG
+- Automatic configuration for Krylov and AMG variants
 
 Requirements:
 - NVIDIA GPU with CUDA support
@@ -17,7 +17,7 @@ Requirements:
 
 Example:
     >>> import torch
-    >>> from pytorch_sparse_solver.module_b import amgx_cg, amgx_bicgstab, amgx_gmres
+    >>> from pytorch_sparse_solver.module_b import amgx_cg, amgx_bicgstab, amgx_gmres, amgx_amg
     >>>
     >>> # Create a sparse test system
     >>> n = 1000
@@ -27,6 +27,9 @@ Example:
     >>>
     >>> # Solve using AMGX CG
     >>> x = amgx_cg(A, b, tol=1e-8)
+    >>>
+    >>> # Or use the AMG solver directly
+    >>> x = amgx_amg(A, b, tol=1e-8)
 """
 
 # Lazy imports to avoid ImportError when pyamgx is not installed
@@ -42,7 +45,7 @@ def _lazy_import():
 
 def amgx_cg(A, b, tol=1e-8, maxiter=1000):
     """
-    Solve Ax = b using AMGX CG with AMG preconditioner.
+    Solve Ax = b using the AMGX CG solver.
 
     Parameters:
         A: Sparse or dense matrix (torch.Tensor)
@@ -58,7 +61,7 @@ def amgx_cg(A, b, tol=1e-8, maxiter=1000):
 
 def amgx_bicgstab(A, b, tol=1e-8, maxiter=1000):
     """
-    Solve Ax = b using AMGX BiCGStab with AMG preconditioner.
+    Solve Ax = b using the AMGX BiCGStab solver.
 
     Parameters:
         A: Sparse or dense matrix (torch.Tensor)
@@ -74,7 +77,7 @@ def amgx_bicgstab(A, b, tol=1e-8, maxiter=1000):
 
 def amgx_gmres(A, b, tol=1e-8, maxiter=1000):
     """
-    Solve Ax = b using AMGX GMRES with AMG preconditioner.
+    Solve Ax = b using the AMGX GMRES solver.
 
     Parameters:
         A: Sparse or dense matrix (torch.Tensor)
@@ -87,6 +90,22 @@ def amgx_gmres(A, b, tol=1e-8, maxiter=1000):
     """
     mod = _lazy_import()
     return mod.amgx_gmres(A, b, tol=tol, maxiter=maxiter)
+
+def amgx_amg(A, b, tol=1e-8, maxiter=1000):
+    """
+    Solve Ax = b using AMGX AMG directly.
+
+    Parameters:
+        A: Sparse or dense matrix (torch.Tensor)
+        b: Right-hand side vector (torch.Tensor)
+        tol: Convergence tolerance (default: 1e-8)
+        maxiter: Maximum iterations / cycles (default: 1000)
+
+    Returns:
+        x: Solution vector (torch.Tensor)
+    """
+    mod = _lazy_import()
+    return mod.amgx_amg(A, b, tol=tol, maxiter=maxiter)
 
 def DifferentiableAMGXSolver():
     """Get the DifferentiableAMGXSolver class."""
@@ -102,6 +121,7 @@ __all__ = [
     'amgx_cg',
     'amgx_bicgstab',
     'amgx_gmres',
+    'amgx_amg',
     'DifferentiableAMGXSolver',
     'AMGXManager',
 ]

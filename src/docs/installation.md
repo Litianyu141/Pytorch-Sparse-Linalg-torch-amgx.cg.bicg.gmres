@@ -24,19 +24,18 @@ conda create -n pytorch_sparse python=3.11 -y
 conda activate pytorch_sparse
 
 # Install PyTorch
-pip install torch>=2.0.0
+python -m pip install "torch>=2.0.0"
 
 # Install the package
-cd /path/to/Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-
-pip install -e .
+pip install "git+https://github.com/Litianyu141/Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-.git"
 ```
 
 ### Method 2: Direct Usage
 
-```bash
-# No installation needed, just add to Python path
+```python
+# No installation needed, just add the repo's src/ directory to Python path
 import sys
-sys.path.insert(0, '/path/to/Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-')
+sys.path.insert(0, '/path/to/Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-/src')
 
 from pytorch_sparse_solver import solve
 ```
@@ -234,9 +233,8 @@ Module A (JAX-style Iterative Solvers): Available
   - GMRES (Generalized Minimal Residual)
 
 Module B (PyAMGX GPU Solver): Available
-  - AMGX CG with AMG preconditioner
-  - AMGX BiCGStab with AMG preconditioner
-  - AMGX GMRES with AMG preconditioner
+  - AMGX CG / BiCGStab / GMRES
+  - AMGX AMG
   - Automatic differentiation support
 
 Module C (cuDSS Direct Solver): Available
@@ -251,7 +249,8 @@ Total: 3/3 modules available
 ### Run Complete Test Suite
 
 ```bash
-python run_all_tests.py
+pytest
+python src/run.py --test
 ```
 
 ### Run Performance Benchmarks

@@ -1,6 +1,6 @@
 # PyTorch Sparse Solver - Module Architecture
 
-This document provides detailed documentation of the four main functional modules and their architectural design in the `pytorch_sparse_solver` package.
+This document provides detailed documentation of the three backend modules plus the unified interface in the `pytorch_sparse_solver` package.
 
 ## Table of Contents
 
@@ -8,7 +8,7 @@ This document provides detailed documentation of the four main functional module
 - [Module A: JAX-style Iterative Solvers](#module-a-jax-style-iterative-solvers)
 - [Module B: PyAMGX GPU-accelerated Solvers](#module-b-pyamgx-gpu-accelerated-solvers)
 - [Module C: cuDSS Direct Solver](#module-c-cudss-direct-solver)
-- [Module D: Unified Interface](#module-d-unified-interface)
+- [Unified Interface](#unified-interface)
 - [Module Independence Design](#module-independence-design)
 
 ---
@@ -27,7 +27,7 @@ This document provides detailed documentation of the four main functional module
 ```
 pytorch_sparse_solver/
 ├── __init__.py              # Main entry point
-├── solver.py                # Unified solver class (Module D)
+├── solver.py                # Unified solver class
 ├── module_a/                # JAX-style iterative solvers
 │   ├── __init__.py
 │   ├── torch_sparse_linalg.py   # CG, BiCGStab, GMRES
@@ -100,7 +100,7 @@ Module B wraps NVIDIA's AMGX library via pyamgx Python bindings, providing:
 - **AMGX CG**: GPU-accelerated conjugate gradient
 - **AMGX BiCGStab**: GPU-accelerated BiCGStab
 - **AMGX GMRES**: GPU-accelerated GMRES
-- **AMG Preconditioner**: Algebraic multigrid preconditioning
+- **AMGX AMG**: Direct algebraic multigrid solve
 
 ### Dependencies
 
@@ -213,11 +213,11 @@ if cudss_available():
 
 ---
 
-## Module D: Unified Interface
+## Unified Interface
 
 ### Description
 
-Module D provides the unified `SparseSolver` class that integrates all backends:
+The unified interface provides the `SparseSolver` class that integrates all backends:
 
 - **Automatic Backend Selection**: Based on availability and matrix properties
 - **Consistent API**: Unified solving interface
@@ -293,7 +293,7 @@ print_availability_report()
 
 | Combination | Installation | Available Features |
 |-------------|--------------|-------------------|
-| A only | `pip install pytorch_sparse_solver` | CG, BiCGStab, GMRES (CPU/GPU) |
+| A only | `pip install "git+https://github.com/Litianyu141/Pytorch_Sparse_Linalg-torch.cg-bicg-gmres-.git"` | CG, BiCGStab, GMRES (CPU/GPU) |
 | A+B | Install pyamgx | Above + AMGX acceleration |
 | A+C | Compile PyTorch with cuDSS | Above + Direct method |
 | A+B+C | Full installation | All features |
